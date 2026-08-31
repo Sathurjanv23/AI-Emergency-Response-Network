@@ -1,0 +1,315 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import {
+  LayoutDashboard, Map, AlertTriangle, Brain, BarChart3, Users,
+  Truck, Building2, Cpu, Bell, FileText, Activity, Shield,
+  Settings, ClipboardList, HeartPulse, Package, Radio, UserCheck,
+  Navigation, Waves, ChevronLeft, ChevronRight
+} from 'lucide-react';
+import { useState } from 'react';
+import type { UserRole } from '@/types';
+import { useTranslation } from '@/lib/i18n';
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  badge?: string | number;
+  badgeVariant?: 'critical' | 'cyan' | 'warning';
+}
+
+interface NavSection {
+  title?: string;
+  items: NavItem[];
+}
+
+// ─── Navigation Definitions ──────────────────────────────────
+
+function getNavSections(role: UserRole): NavSection[] {
+  switch (role) {
+    case 'officer':
+      return [
+        {
+          title: 'Command Center',
+          items: [
+            { href: '/command', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { href: '/command/map', label: 'Live Map', icon: <Map className="w-4 h-4" /> },
+            { href: '/command/incidents', label: 'Incidents', icon: <AlertTriangle className="w-4 h-4" />, badge: 5, badgeVariant: 'critical' },
+            { href: '/command/ai-analysis', label: 'AI Analysis', icon: <Brain className="w-4 h-4" /> },
+          ],
+        },
+        {
+          title: 'Operations',
+          items: [
+            { href: '/command/prediction', label: 'Prediction', icon: <Waves className="w-4 h-4" /> },
+            { href: '/command/rescue', label: 'Rescue Ops', icon: <Truck className="w-4 h-4" /> },
+            { href: '/command/resources', label: 'Resources', icon: <Package className="w-4 h-4" /> },
+            { href: '/command/hospitals', label: 'Hospitals', icon: <HeartPulse className="w-4 h-4" /> },
+          ],
+        },
+        {
+          title: 'Intelligence',
+          items: [
+            { href: '/command/copilot', label: 'NOVA Copilot', icon: <Cpu className="w-4 h-4" /> },
+            { href: '/command/alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: 3, badgeVariant: 'critical' },
+            { href: '/command/analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+          ],
+        },
+      ];
+
+    case 'citizen':
+      return [
+        {
+          items: [
+            { href: '/citizen', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { href: '/citizen/report', label: 'Report Emergency', icon: <AlertTriangle className="w-4 h-4" /> },
+            { href: '/citizen/sos', label: 'SOS', icon: <Radio className="w-4 h-4" /> },
+            { href: '/citizen/reports', label: 'My Reports', icon: <ClipboardList className="w-4 h-4" /> },
+            { href: '/citizen/safety', label: 'Safety Guide', icon: <Shield className="w-4 h-4" /> },
+          ],
+        },
+      ];
+
+    case 'rescue_team':
+      return [
+        {
+          items: [
+            { href: '/rescue', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { href: '/rescue/incidents', label: 'Assigned Incidents', icon: <AlertTriangle className="w-4 h-4" />, badge: 2, badgeVariant: 'critical' },
+            { href: '/rescue/navigation', label: 'Navigation', icon: <Navigation className="w-4 h-4" /> },
+            { href: '/rescue/team', label: 'Team Status', icon: <Users className="w-4 h-4" /> },
+          ],
+        },
+      ];
+
+    case 'hospital':
+      return [
+        {
+          items: [
+            { href: '/hospital', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { href: '/hospital/emergencies', label: 'Incoming', icon: <AlertTriangle className="w-4 h-4" />, badge: 2, badgeVariant: 'critical' },
+            { href: '/hospital/triage', label: 'Triage Queue', icon: <ClipboardList className="w-4 h-4" /> },
+            { href: '/hospital/capacity', label: 'Capacity', icon: <Activity className="w-4 h-4" /> },
+            { href: '/hospital/ambulances', label: 'Ambulances', icon: <Truck className="w-4 h-4" /> },
+          ],
+        },
+      ];
+
+    case 'admin':
+      return [
+        {
+          title: 'System',
+          items: [
+            { href: '/admin', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { href: '/admin/users', label: 'Users', icon: <Users className="w-4 h-4" /> },
+            { href: '/admin/organizations', label: 'Organizations', icon: <Building2 className="w-4 h-4" /> },
+          ],
+        },
+        {
+          title: 'Configuration',
+          items: [
+            { href: '/admin/resources', label: 'Resources', icon: <Package className="w-4 h-4" /> },
+            { href: '/admin/ai-config', label: 'AI Config', icon: <Cpu className="w-4 h-4" /> },
+            { href: '/admin/monitoring', label: 'Monitoring', icon: <Activity className="w-4 h-4" /> },
+            { href: '/admin/audit-logs', label: 'Audit Logs', icon: <FileText className="w-4 h-4" /> },
+          ],
+        },
+      ];
+
+    default:
+      return [];
+  }
+}
+
+// ─── Sidebar Component ───────────────────────────────────────
+
+interface SidebarProps {
+  role: UserRole;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
+  const pathname = usePathname();
+  const { t } = useTranslation();
+  const rawSections = getNavSections(role);
+
+  const getTranslationKey = (label: string) => {
+    const map: Record<string, string> = {
+      'Dashboard': 'nav.dashboard',
+      'Live Map': 'nav.map',
+      'Incidents': 'nav.incidents',
+      'Assigned Incidents': 'nav.incidents',
+      'AI Analysis': 'nav.ai_analysis',
+      'Prediction': 'nav.prediction',
+      'Rescue Ops': 'nav.rescue_ops',
+      'Resources': 'nav.resources',
+      'Hospitals': 'nav.hospitals',
+      'NOVA Copilot': 'nav.copilot',
+      'Alerts': 'nav.alerts',
+      'Analytics': 'nav.analytics',
+      'SOS': 'nav.sos',
+      'Report Emergency': 'btn.report',
+      'My Reports': 'nav.reports',
+      'Safety Guide': 'nav.safety',
+      'Team Status': 'nav.team_status',
+      'Navigation': 'nav.navigation',
+      'Triage Queue': 'nav.triage',
+      'Incoming': 'nav.incoming',
+      'Capacity': 'nav.capacity',
+      'Ambulances': 'nav.ambulances',
+      'Users': 'nav.users',
+      'Organizations': 'nav.organizations',
+      'Audit Logs': 'nav.audit_logs',
+      'AI Config': 'nav.ai_config',
+      'Monitoring': 'nav.monitoring',
+    };
+    return map[label] || label;
+  };
+
+  const getSectionTitleKey = (title?: string) => {
+    if (!title) return '';
+    const map: Record<string, string> = {
+      'Command Center': 'section.command_center',
+      'Operations': 'section.operations',
+      'Intelligence': 'section.intelligence',
+      'System': 'section.system',
+      'Configuration': 'section.configuration',
+    };
+    return map[title] || title;
+  };
+
+  const sections = rawSections.map((section) => ({
+    ...section,
+    title: section.title ? t(getSectionTitleKey(section.title)) : undefined,
+    items: section.items.map((item) => ({
+      ...item,
+      label: t(getTranslationKey(item.label)),
+    })),
+  }));
+
+  const roleColors: Record<UserRole, string> = {
+    citizen: 'text-nova-cyan border-nova-cyan/30 bg-nova-cyan/10',
+    officer: 'text-purple-400 border-purple-400/30 bg-purple-400/10',
+    rescue_team: 'text-orange-400 border-orange-400/30 bg-orange-400/10',
+    hospital: 'text-pink-400 border-pink-400/30 bg-pink-400/10',
+    admin: 'text-red-400 border-red-400/30 bg-red-400/10',
+  };
+
+  const roleLabels: Record<UserRole, string> = {
+    citizen: 'CITIZEN',
+    officer: 'OFFICER',
+    rescue_team: 'RESCUE',
+    hospital: 'HOSPITAL',
+    admin: 'ADMIN',
+  };
+
+  return (
+    <motion.aside
+      className={cn(
+        'flex flex-col bg-nova-surface border-r border-nova-border h-full transition-all duration-300',
+        collapsed ? 'w-16' : 'w-56'
+      )}
+    >
+      {/* Role Badge */}
+      {!collapsed && (
+        <div className="px-4 py-3 border-b border-nova-border">
+          <span className={cn('text-[10px] font-bold px-2 py-1 rounded border', roleColors[role])}>
+            {roleLabels[role]} PORTAL
+          </span>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-3 px-2">
+        {sections.map((section, sIdx) => (
+          <div key={sIdx} className="mb-4">
+            {section.title && !collapsed && (
+              <p className="text-[10px] font-bold text-nova-text-muted uppercase tracking-widest px-2 mb-1.5">
+                {section.title}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const isActive = pathname === item.href || (item.href !== `/${role}` && pathname?.startsWith(item.href));
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all duration-150 group relative',
+                      isActive
+                        ? 'bg-nova-cyan/10 text-nova-cyan border border-nova-cyan/20'
+                        : 'text-nova-text-dim hover:bg-nova-surface2 hover:text-nova-text border border-transparent'
+                    )}
+                  >
+                    <span className={cn(isActive ? 'text-nova-cyan' : 'text-nova-text-muted group-hover:text-nova-text')}>
+                      {item.icon}
+                    </span>
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1 font-medium text-xs">{item.label}</span>
+                        {item.badge && (
+                          <span className={cn(
+                            'text-[9px] font-bold px-1.5 py-0.5 rounded-full',
+                            item.badgeVariant === 'critical' ? 'bg-red-500 text-white' :
+                            item.badgeVariant === 'warning' ? 'bg-orange-500 text-white' :
+                            'bg-nova-cyan text-nova-bg'
+                          )}>
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {isActive && (
+                      <motion.div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-nova-cyan rounded-full"
+                        layoutId={`active-indicator-${role}`}
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Bottom toggle */}
+      <div className="border-t border-nova-border p-2">
+        <button
+          onClick={onToggle}
+          className="w-full flex items-center justify-center h-8 rounded-lg hover:bg-nova-surface2 text-nova-text-muted hover:text-nova-text transition-colors"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+      </div>
+    </motion.aside>
+  );
+}
+
+// ─── Dashboard Shell ─────────────────────────────────────────
+
+interface DashboardShellProps {
+  children: React.ReactNode;
+  role: UserRole;
+}
+
+export function DashboardShell({ children, role }: DashboardShellProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  return (
+    <div className="flex h-[calc(100vh-116px)] overflow-hidden">
+      <Sidebar role={role} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <main className="flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
+  );
+}

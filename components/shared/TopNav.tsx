@@ -1,0 +1,365 @@
+'use client';
+
+import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useNovaStore } from '@/lib/store/nova-store';
+import { signOut } from '@/lib/auth';
+import { ALERT_TICKER_MESSAGES } from '@/lib/mock/data';
+import { cn } from '@/lib/utils';
+import { Bell, Search, ChevronDown, Zap, AlertTriangle, Play, Square, Globe, LogOut } from 'lucide-react';
+import type { UserRole } from '@/types';
+import { useTranslation } from '@/lib/i18n';
+
+// ─── NOVA Logo ───────────────────────────────────────────────
+
+export function NovaLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizeMap = { sm: 'w-6 h-6', md: 'w-8 h-8', lg: 'w-10 h-10' };
+  const textMap = { sm: 'text-sm', md: 'text-base', lg: 'text-xl' };
+
+  return (
+    <Link href="/" className="flex items-center gap-2.5 group">
+      <div className={cn('relative flex-shrink-0', sizeMap[size])}>
+        <svg viewBox="0 0 32 32" fill="none" className="w-full h-full">
+          <polygon points="16,2 30,28 16,22 2,28" fill="none" stroke="#00d4ff" strokeWidth="1.5" />
+          <polygon points="16,8 26,26 16,20 6,26" fill="rgba(0,212,255,0.08)" stroke="#2563eb" strokeWidth="1" />
+          <circle cx="16" cy="14" r="2.5" fill="#00d4ff" style={{ filter: 'drop-shadow(0 0 4px #00d4ff)' }} />
+        </svg>
+      </div>
+      <div>
+        <div className={cn('font-bold font-display text-nova-text tracking-wider', textMap[size])}>
+          PROJECT <span className="text-nova-cyan text-glow-cyan">NOVA</span>
+        </div>
+        {size !== 'sm' && (
+          <div className="text-[9px] text-nova-text-muted tracking-widest uppercase">
+            AI Emergency Response Network
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+// ─── Alert Ticker ────────────────────────────────────────────
+
+export function AlertTicker() {
+  const { localize, t } = useTranslation();
+  return (
+    <div className="bg-red-950/50 border-y border-red-500/20 py-1.5 overflow-hidden relative">
+      <div className="flex items-center gap-3 px-4">
+        <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest flex-shrink-0 bg-red-500/20 px-2 py-0.5 rounded">
+          {t('common.live')}
+        </span>
+        <div className="ticker-wrapper flex-1">
+          <div className="ticker-content">
+            {[...ALERT_TICKER_MESSAGES, ...ALERT_TICKER_MESSAGES].map((msg, i) => (
+              <span key={i} className="inline-flex items-center text-xs text-red-200/80 mr-16">
+                {localize(msg)}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Notification Bell ───────────────────────────────────────
+
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const { notifications, unreadCount, markNotificationRead, markAllRead } = useNovaStore();
+  const { t, localize } = useTranslation();
+  const recent = notifications.slice(0, 6);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-nova-surface2 transition-colors border border-transparent hover:border-nova-border"
+        aria-label="Notifications"
+      >
+        <Bell className="w-4 h-4 text-nova-text-dim" />
+        {unreadCount > 0 && (
+          <motion.span
+            className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+          >
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </motion.span>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+            <motion.div
+              className="absolute right-0 top-11 w-80 nova-card border border-nova-border rounded-xl shadow-nova z-50 overflow-hidden"
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.15 }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-nova-border">
+                <span className="text-sm font-semibold text-nova-text">{t('common.notifications')}</span>
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="text-xs text-nova-cyan hover:underline">
+                    {t('common.mark_all_read')}
+                  </button>
+                )}
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {recent.map((notif) => (
+                  <button
+                    key={notif.id}
+                    onClick={() => markNotificationRead(notif.id)}
+                    className={cn(
+                      'w-full text-left px-4 py-3 border-b border-nova-border/50 hover:bg-nova-surface2 transition-colors',
+                      !notif.read && 'bg-nova-cyan/3'
+                    )}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className={cn(
+                        'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
+                        notif.severity === 'critical' ? 'bg-red-400' :
+                        notif.severity === 'high' ? 'bg-orange-400' :
+                        notif.severity === 'medium' ? 'bg-yellow-400' : 'bg-nova-cyan'
+                      )} />
+                      <div>
+                        <p className="text-xs font-semibold text-nova-text">{localize(notif.title)}</p>
+                        <p className="text-xs text-nova-text-dim mt-0.5 line-clamp-2">{localize(notif.message)}</p>
+                      </div>
+                      {!notif.read && <div className="w-1.5 h-1.5 rounded-full bg-nova-cyan flex-shrink-0 mt-1.5" />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="px-4 py-2.5 border-t border-nova-border">
+                <Link href="/command/alerts" className="text-xs text-nova-cyan hover:underline" onClick={() => setOpen(false)}>
+                  {t('common.view_all_notifications')} →
+                </Link>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Simulation Control Button ───────────────────────────────
+
+export function SimulationControl() {
+  const { simulation, startSimulation, stopSimulation } = useNovaStore();
+  const { t } = useTranslation();
+
+  return (
+    <motion.button
+      onClick={simulation.isActive ? stopSimulation : startSimulation}
+      className={cn(
+        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+        simulation.isActive
+          ? 'bg-red-500/20 border-red-500/40 text-red-300 hover:bg-red-500/30'
+          : 'bg-nova-cyan/10 border-nova-cyan/30 text-nova-cyan hover:bg-nova-cyan/20'
+      )}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      {simulation.isActive ? (
+        <>
+          <motion.div
+            className="w-2 h-2 rounded-sm bg-red-400"
+            animate={{ opacity: [1, 0.4, 1] }}
+            transition={{ duration: 0.8, repeat: Infinity }}
+          />
+          {t('btn.stop_sim')}
+        </>
+      ) : (
+        <>
+          <Play className="w-3 h-3" />
+          {t('btn.start_sim')}
+        </>
+      )}
+    </motion.button>
+  );
+}
+
+// ─── Role Switcher ───────────────────────────────────────────
+
+const ROLE_LINKS: Record<UserRole, string> = {
+  citizen: '/citizen',
+  officer: '/command',
+  rescue_team: '/rescue',
+  hospital: '/hospital',
+  admin: '/admin',
+};
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  citizen: 'Citizen',
+  officer: 'Emergency Officer',
+  rescue_team: 'Rescue Team',
+  hospital: 'Hospital',
+  admin: 'Administrator',
+};
+
+// ─── Main Top Navigation Bar ─────────────────────────────────
+
+interface TopNavProps {
+  role?: UserRole;
+  showTicker?: boolean;
+}
+
+export function TopNav({ role, showTicker = true }: TopNavProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { language, setLanguage, currentUser, logout } = useNovaStore();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const { t } = useTranslation();
+
+  // Compute avatar initials from the current user's name
+  const avatarInitials = currentUser?.name
+    ? currentUser.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+    : 'DP';
+
+  const handleSignOut = () => {
+    signOut();
+    logout();
+    setRoleMenuOpen(false);
+    router.push('/login');
+  };
+
+  const TRANSLATED_ROLES: Record<UserRole, string> = {
+    citizen: t('portal.citizen'),
+    officer: t('portal.command'),
+    rescue_team: t('portal.rescue'),
+    hospital: t('portal.hospital'),
+    admin: t('portal.admin'),
+  };
+
+  const LANG_OPTIONS = [
+    { code: 'en', label: 'English', short: 'EN' },
+    { code: 'ta', label: 'தமிழ்', short: 'TA' },
+    { code: 'si', label: 'සිංහල', short: 'SI' },
+  ] as const;
+
+  return (
+    <header className="sticky top-0 z-50">
+      {showTicker && <AlertTicker />}
+      <div className="bg-nova-bg/95 backdrop-blur-lg border-b border-nova-border">
+        <div className="flex items-center justify-between px-4 h-14 gap-4">
+          <NovaLogo size="md" />
+
+          {/* Search */}
+          <div className="flex-1 max-w-xs hidden md:block">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-nova-text-muted" />
+              <input
+                type="text"
+                placeholder={t('common.search_placeholder')}
+                className="w-full bg-nova-surface border border-nova-border rounded-lg pl-9 pr-3 py-1.5 text-xs text-nova-text placeholder:text-nova-text-muted focus:outline-none focus:border-nova-cyan/40 transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex items-center gap-2">
+            {/* Language Switcher */}
+            <div className="flex items-center gap-0.5 bg-nova-surface border border-nova-border rounded-lg p-0.5">
+              {LANG_OPTIONS.map((opt) => (
+                <button
+                  key={opt.code}
+                  onClick={() => setLanguage(opt.code)}
+                  className={cn(
+                    'px-2 py-1 rounded-md text-[10px] font-bold transition-all',
+                    language === opt.code
+                      ? 'bg-nova-cyan text-nova-bg'
+                      : 'text-nova-text-muted hover:text-nova-text'
+                  )}
+                >
+                  {opt.short}
+                </button>
+              ))}
+            </div>
+
+            <NotificationBell />
+
+            {/* Interactive Role Switcher Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+                className="flex items-center gap-1.5 text-xs font-medium text-nova-text-dim bg-nova-surface border border-nova-border rounded-lg px-3 py-1.5 hover:border-nova-border2 hover:text-nova-text transition-colors"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-nova-cyan animate-pulse-slow" />
+                {role ? TRANSLATED_ROLES[role] : t('btn.select_portal')}
+                <ChevronDown className="w-3.5 h-3.5 text-nova-text-muted ml-0.5" />
+              </button>
+
+              <AnimatePresence>
+                {roleMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setRoleMenuOpen(false)} />
+                    <motion.div
+                      className="absolute right-0 top-9 w-52 nova-card border border-nova-border rounded-xl shadow-nova z-50 overflow-hidden p-1.5 space-y-0.5"
+                      initial={{ opacity: 0, y: -5, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <div className="px-2.5 py-1.5 text-[9px] font-bold text-nova-text-muted uppercase tracking-wider">
+                        {t('btn.select_portal')}
+                      </div>
+                      {Object.entries(ROLE_LINKS).map(([key, href]) => (
+                        <Link
+                          key={key}
+                          href={href}
+                          onClick={() => setRoleMenuOpen(false)}
+                          className={cn(
+                            'flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-colors',
+                            role === key
+                              ? 'bg-nova-cyan/10 text-nova-cyan'
+                              : 'text-nova-text-dim hover:bg-nova-surface2 hover:text-nova-text'
+                          )}
+                        >
+                          <div className={cn('w-1.5 h-1.5 rounded-full', role === key ? 'bg-nova-cyan' : 'bg-nova-border')} />
+                          {TRANSLATED_ROLES[key as UserRole]}
+                        </Link>
+                      ))}
+                      <div className="border-t border-nova-border my-1" />
+                      <Link
+                        href="/"
+                        onClick={() => setRoleMenuOpen(false)}
+                        className="flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-nova-text-muted hover:text-nova-text hover:bg-nova-surface2 transition-colors"
+                      >
+                        🚪 {t('btn.home')}
+                      </Link>
+                      <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut className="w-3.5 h-3.5" /> {t('btn.sign_out')}
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Profile avatar */}
+            <div
+              title={currentUser?.name ?? 'Profile'}
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-nova-cyan to-nova-blue flex items-center justify-center text-nova-bg text-xs font-bold cursor-pointer hover:scale-105 transition-transform flex-shrink-0"
+              onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+            >
+              {avatarInitials}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
