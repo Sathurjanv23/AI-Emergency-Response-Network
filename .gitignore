@@ -1,17 +1,20 @@
 # Dependencies
-/node_modules
+node_modules/
+**/node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
 
 # Testing & Coverage
-/coverage
+coverage/
+**/coverage/
 
 # Next.js Build Outputs
-/.next/
-/out/
-/build
-/dist
+.next/
+**/.next/
+out/
+build/
+dist/
 
 # Environment variables
 .env
@@ -49,3 +52,14 @@ Thumbs.db
 # TypeScript & Cache
 *.tsbuildinfo
 next-env.d.ts
+
+# Maven / Java (Backend)
+**/target/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+.mvn/
+backend/.flattened-pom.xml
+
