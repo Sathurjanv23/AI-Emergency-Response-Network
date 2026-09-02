@@ -1,16 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { useNovaStore } from '@/lib/store/nova-store';
-import { MOCK_AUDIT_LOGS, MOCK_USERS } from '@/lib/mock/data';
-import { motion } from 'framer-motion';
-import { Settings, Shield, Users, Activity, FileText, Database, ShieldAlert, Cpu, CheckCircle } from 'lucide-react';
-import { cn, formatDateTime } from '@/lib/utils';
+import { adminApi } from '@/lib/api/client';
+import { Settings, Users, Activity, FileText, Database, Cpu } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
+import type { User, AuditLog } from '@/types';
 
 export default function AdminOperationsCatchAll() {
   const params = useParams<{ slug: string[] }>();
@@ -18,7 +18,28 @@ export default function AdminOperationsCatchAll() {
   const slug = params?.slug?.[0] || '';
   const { t, localize, timeAgo, statusLabel } = useTranslation();
 
-  const { incidents } = useNovaStore();
+  const [users, setUsers] = useState<User[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [usersRes, logsRes] = await Promise.allSettled([
+          adminApi.getUsers(),
+          adminApi.getAuditLogs(),
+        ]);
+        if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)) {
+          setUsers(usersRes.value);
+        }
+        if (logsRes.status === 'fulfilled' && Array.isArray(logsRes.value)) {
+          setAuditLogs(logsRes.value);
+        }
+      } catch {
+        // Fallback to empty arrays
+      }
+    }
+    loadData();
+  }, []);
 
   // 1. USERS LIST PANEL
   const renderUsers = () => {
@@ -39,19 +60,27 @@ export default function AdminOperationsCatchAll() {
               </tr>
             </thead>
             <tbody className="divide-y divide-nova-border/50 text-sm text-nova-text">
-              {MOCK_USERS.map((user) => (
-                <tr key={user.id} className="hover:bg-nova-surface/10 transition-colors">
-                  <td className="p-4 font-semibold">{user.name}</td>
-                  <td className="p-4 text-xs text-nova-text-muted">{user.email}</td>
-                  <td className="p-4 text-xs capitalize text-nova-cyan">{user.role.replace('_', ' ')}</td>
-                  <td className="p-4 text-xs text-nova-text-muted">{user.district ? localize(user.district) : 'National'}</td>
-                  <td className="p-4">
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full">
-                      {statusLabel('active')}
-                    </span>
+              {users.length > 0 ? (
+                users.map((user) => (
+                  <tr key={user.id} className="hover:bg-nova-surface/10 transition-colors">
+                    <td className="p-4 font-semibold">{user.name}</td>
+                    <td className="p-4 text-xs text-nova-text-muted">{user.email}</td>
+                    <td className="p-4 text-xs capitalize text-nova-cyan">{user.role.replace('_', ' ')}</td>
+                    <td className="p-4 text-xs text-nova-text-muted">{user.district ? localize(user.district) : 'National'}</td>
+                    <td className="p-4">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full">
+                        {statusLabel('active')}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-xs text-nova-text-dim">
+                    No user accounts registered in database.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -171,19 +200,25 @@ export default function AdminOperationsCatchAll() {
           <FileText className="w-5 h-5 text-nova-cyan" /> {t('heading.audit_logs_full')}
         </h2>
         <div className="nova-card border border-nova-border rounded-xl p-3 divide-y divide-nova-border/50">
-          {MOCK_AUDIT_LOGS.map((log) => (
-            <div key={log.id} className="p-3 flex items-start gap-3 hover:bg-nova-surface/10 transition-colors">
-              <span className="text-lg mt-0.5">⚙️</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start gap-2">
-                  <p className="text-sm font-semibold text-nova-text">{log.action}</p>
-                  <span className="text-[10px] text-nova-text-muted">{timeAgo(log.timestamp)}</span>
+          {auditLogs.length > 0 ? (
+            auditLogs.map((log) => (
+              <div key={log.id} className="p-3 flex items-start gap-3 hover:bg-nova-surface/10 transition-colors">
+                <span className="text-lg mt-0.5">⚙️</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start gap-2">
+                    <p className="text-sm font-semibold text-nova-text">{log.action}</p>
+                    <span className="text-[10px] text-nova-text-muted">{timeAgo(log.timestamp)}</span>
+                  </div>
+                  <p className="text-xs text-nova-text-dim mt-0.5">{log.details}</p>
+                  <p className="text-[10px] text-nova-text-muted mt-1">By: {log.userName} · IP: {log.ipAddress}</p>
                 </div>
-                <p className="text-xs text-nova-text-dim mt-0.5">{log.details}</p>
-                <p className="text-[10px] text-nova-text-muted mt-1">By: {log.userName} · IP: {log.ipAddress}</p>
               </div>
+            ))
+          ) : (
+            <div className="text-center py-6 text-xs text-nova-text-dim">
+              No audit logs recorded in database.
             </div>
-          ))}
+          )}
         </div>
       </div>
     );

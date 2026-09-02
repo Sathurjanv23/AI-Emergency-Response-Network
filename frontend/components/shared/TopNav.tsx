@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useNovaStore } from '@/lib/store/nova-store';
 import { signOut } from '@/lib/auth';
-import { ALERT_TICKER_MESSAGES } from '@/lib/mock/data';
 import { cn } from '@/lib/utils';
 import { Bell, Search, ChevronDown, Zap, AlertTriangle, Play, Square, Globe, LogOut } from 'lucide-react';
 import type { UserRole } from '@/types';
@@ -45,16 +44,50 @@ export function NovaLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 
 export function AlertTicker() {
   const { localize, t } = useTranslation();
+  const { notifications, riskPredictions, incidents } = useNovaStore();
+
+  const activeAlerts: string[] = [];
+
+  // Critical active incidents
+  incidents
+    .filter((i) => i.severity === 'critical' && i.status !== 'resolved')
+    .forEach((i) => activeAlerts.push(`🔴 CRITICAL: ${i.id} — ${i.title} (${i.location.district || ''})`));
+
+  // High risk predictions
+  riskPredictions
+    .filter((rp) => rp.floodRisk >= 70 || rp.overallRisk >= 70)
+    .forEach((rp) => activeAlerts.push(`⚠️ ELEVATED RISK: ${rp.zone} (${rp.district}) — Flood Risk ${rp.floodRisk}%`));
+
+  // Unread critical/high notifications
+  notifications
+    .filter((n) => !n.read && (n.severity === 'critical' || n.severity === 'high'))
+    .forEach((n) => activeAlerts.push(`📢 ${n.title} — ${n.message}`));
+
+  const displayList = activeAlerts.length > 0
+    ? activeAlerts
+    : ['All operational sectors normal — No active critical emergency alerts'];
+
   return (
-    <div className="bg-red-950/50 border-y border-red-500/20 py-1.5 overflow-hidden relative">
+    <div className={cn(
+      "border-y py-1.5 overflow-hidden relative transition-colors",
+      activeAlerts.length > 0
+        ? "bg-red-950/50 border-red-500/20"
+        : "bg-nova-surface border-nova-border"
+    )}>
       <div className="flex items-center gap-3 px-4">
-        <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest flex-shrink-0 bg-red-500/20 px-2 py-0.5 rounded">
-          {t('common.live')}
+        <span className={cn(
+          "text-[10px] font-bold uppercase tracking-widest flex-shrink-0 px-2 py-0.5 rounded",
+          activeAlerts.length > 0 ? "bg-red-500/20 text-red-400" : "bg-nova-cyan/15 text-nova-cyan"
+        )}>
+          {activeAlerts.length > 0 ? t('common.live') : 'STATUS'}
         </span>
         <div className="ticker-wrapper flex-1">
           <div className="ticker-content">
-            {[...ALERT_TICKER_MESSAGES, ...ALERT_TICKER_MESSAGES].map((msg, i) => (
-              <span key={i} className="inline-flex items-center text-xs text-red-200/80 mr-16">
+            {[...displayList, ...displayList].map((msg, i) => (
+              <span key={i} className={cn(
+                "inline-flex items-center text-xs mr-16",
+                activeAlerts.length > 0 ? "text-red-200/80" : "text-nova-text-dim"
+              )}>
                 {localize(msg)}
               </span>
             ))}
@@ -70,20 +103,20 @@ export function AlertTicker() {
 function NotificationBell() {
   const [open, setOpen] = useState(false);
   const { notifications, unreadCount, markNotificationRead, markAllRead } = useNovaStore();
-  const { t, localize } = useTranslation();
-  const recent = notifications.slice(0, 6);
+  const { t, localize, timeAgo } = useTranslation();
+  const recent = notifications.slice(0, 8);
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-nova-surface2 transition-colors border border-transparent hover:border-nova-border"
+        className="relative w-9 h-9 flex items-center justify-center rounded-lg bg-nova-surface hover:bg-nova-surface2 transition-colors border border-nova-border hover:border-nova-border2"
         aria-label="Notifications"
       >
         <Bell className="w-4 h-4 text-nova-text-dim" />
         {unreadCount > 0 && (
           <motion.span
-            className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center"
+            className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center shadow-sm"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
           >
@@ -95,52 +128,101 @@ function NotificationBell() {
       <AnimatePresence>
         {open && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 z-[99998]" onClick={() => setOpen(false)} />
             <motion.div
-              className="absolute right-0 top-11 w-80 nova-card border border-nova-border rounded-xl shadow-nova z-50 overflow-hidden"
+              className="absolute right-0 mt-2 w-[360px] max-w-[90vw] bg-[#0c1322] border border-nova-border rounded-xl shadow-2xl z-[99999] overflow-hidden"
               initial={{ opacity: 0, y: -8, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ duration: 0.15 }}
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-nova-border">
-                <span className="text-sm font-semibold text-nova-text">{t('common.notifications')}</span>
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-[#0f172a] border-b border-nova-border">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-nova-cyan" />
+                  <span className="text-xs font-bold text-nova-text tracking-wide uppercase">
+                    {t('common.notifications')}
+                  </span>
+                  {unreadCount > 0 && (
+                    <span className="text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.2 rounded-full">
+                      {unreadCount} new
+                    </span>
+                  )}
+                </div>
                 {unreadCount > 0 && (
-                  <button onClick={markAllRead} className="text-xs text-nova-cyan hover:underline">
+                  <button
+                    onClick={markAllRead}
+                    className="text-[11px] text-nova-cyan hover:underline font-medium"
+                  >
                     {t('common.mark_all_read')}
                   </button>
                 )}
               </div>
-              <div className="max-h-80 overflow-y-auto">
-                {recent.map((notif) => (
-                  <button
-                    key={notif.id}
-                    onClick={() => markNotificationRead(notif.id)}
-                    className={cn(
-                      'w-full text-left px-4 py-3 border-b border-nova-border/50 hover:bg-nova-surface2 transition-colors',
-                      !notif.read && 'bg-nova-cyan/3'
-                    )}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div className={cn(
-                        'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
-                        notif.severity === 'critical' ? 'bg-red-400' :
-                        notif.severity === 'high' ? 'bg-orange-400' :
-                        notif.severity === 'medium' ? 'bg-yellow-400' : 'bg-nova-cyan'
-                      )} />
-                      <div>
-                        <p className="text-xs font-semibold text-nova-text">{localize(notif.title)}</p>
-                        <p className="text-xs text-nova-text-dim mt-0.5 line-clamp-2">{localize(notif.message)}</p>
+
+              {/* Notification List */}
+              <div className="max-h-80 overflow-y-auto divide-y divide-nova-border/30">
+                {recent.length > 0 ? (
+                  recent.map((notif) => (
+                    <button
+                      key={notif.id}
+                      onClick={() => markNotificationRead(notif.id)}
+                      className={cn(
+                        'w-full text-left px-4 py-3 hover:bg-nova-surface2/60 transition-colors flex items-start gap-3',
+                        !notif.read ? 'bg-nova-cyan/5' : 'bg-transparent'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0',
+                          notif.severity === 'critical' ? 'bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]' :
+                          notif.severity === 'high' ? 'bg-orange-400 shadow-[0_0_6px_rgba(251,146,60,0.6)]' :
+                          notif.severity === 'medium' ? 'bg-yellow-400' : 'bg-nova-cyan'
+                        )}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="text-xs font-semibold text-nova-text truncate">
+                            {localize(notif.title)}
+                          </p>
+                          {!notif.read && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-nova-cyan flex-shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[11px] text-nova-text-dim mt-0.5 line-clamp-2 leading-relaxed">
+                          {localize(notif.message)}
+                        </p>
+                        {notif.createdAt && (
+                          <p className="text-[9px] text-nova-text-muted mt-1 font-mono">
+                            {timeAgo(notif.createdAt)}
+                          </p>
+                        )}
                       </div>
-                      {!notif.read && <div className="w-1.5 h-1.5 rounded-full bg-nova-cyan flex-shrink-0 mt-1.5" />}
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-8 text-center px-4">
+                    <Bell className="w-8 h-8 text-nova-text-muted mx-auto opacity-40 mb-2" />
+                    <p className="text-xs font-medium text-nova-text-dim">No notifications</p>
+                    <p className="text-[10px] text-nova-text-muted mt-0.5">Emergency alerts will appear here</p>
+                  </div>
+                )}
               </div>
-              <div className="px-4 py-2.5 border-t border-nova-border">
-                <Link href="/command/alerts" className="text-xs text-nova-cyan hover:underline" onClick={() => setOpen(false)}>
+
+              {/* Footer */}
+              <div className="px-4 py-2 bg-[#0f172a] border-t border-nova-border flex justify-between items-center text-xs">
+                <Link
+                  href="/command/alerts"
+                  className="text-[11px] text-nova-cyan hover:underline font-medium"
+                  onClick={() => setOpen(false)}
+                >
                   {t('common.view_all_notifications')} →
                 </Link>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="text-[11px] text-nova-text-muted hover:text-nova-text"
+                >
+                  Close
+                </button>
               </div>
             </motion.div>
           </>
@@ -247,7 +329,7 @@ export function TopNav({ role, showTicker = true }: TopNavProps) {
   ] as const;
 
   return (
-    <header className="sticky top-0 z-50">
+    <header className="sticky top-0 z-[10000]">
       {showTicker && <AlertTicker />}
       <div className="bg-nova-bg/95 backdrop-blur-lg border-b border-nova-border">
         <div className="flex items-center justify-between px-4 h-14 gap-4">

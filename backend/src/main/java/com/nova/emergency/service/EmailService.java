@@ -72,7 +72,7 @@ public class EmailService {
                               <div style="background-color:#080d1a;border:2px dashed #00d4ff;border-radius:12px;padding:24px;text-align:center;margin:24px 0;">
                                 <div style="font-size:11px;font-family:monospace;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Your One-Time Password</div>
                                 <div style="font-family:'Courier New',Courier,monospace;font-size:36px;font-weight:900;letter-spacing:10px;color:#00d4ff;">%s</div>
-                                <div style="font-size:11px;color:#ef4444;margin-top:8px;font-weight:600;">⏱ Valid for 10 minutes only</div>
+                                <div style="font-size:11px;color:#ef4444;margin-top:8px;font-weight:600;">⏱ Valid for 30 seconds only</div>
                               </div>
 
                               <p style="margin:24px 0 0 0;font-size:12px;color:#64748b;line-height:1.5;">

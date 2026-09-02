@@ -7,14 +7,7 @@ import type {
   Notification, SimulationState, User, UserRole, Language
 } from '@/types';
 import { getToken } from '@/lib/auth';
-import {
-  MOCK_INCIDENTS,
-  MOCK_RESCUE_TEAMS,
-  MOCK_HOSPITALS,
-  MOCK_RESOURCES,
-  MOCK_RISK_PREDICTIONS,
-  MOCK_NOTIFICATIONS
-} from '@/lib/mock/data';
+
 
 // ─── API Base ─────────────────────────────────────────────────
 
@@ -362,7 +355,7 @@ export const useNovaStore = create<AppState>()(
     },
 
     // ─── Incidents ──────────────────────────────────────────
-    incidents: MOCK_INCIDENTS,
+    incidents: [],
     fetchIncidents: async (params) => {
       set(s => ({ loading: { ...s.loading, incidents: true } }));
       try {
@@ -370,19 +363,21 @@ export const useNovaStore = create<AppState>()(
           ? '?' + new URLSearchParams(params as Record<string, string>).toString()
           : '';
         const incidents = await apiFetch<Incident[]>(`/incidents${query}`);
-        if (Array.isArray(incidents) && incidents.length > 0) {
+        if (Array.isArray(incidents)) {
           set({ incidents });
         }
       } catch (err) {
-        console.warn('Backend incidents not available, using local store data:', err);
+        console.warn('Backend incidents API error:', err);
       } finally {
         set(s => ({ loading: { ...s.loading, incidents: false } }));
+        get().refreshStats();
       }
     },
     addIncident: (incident) =>
-      set((state) => ({
-        incidents: [incident, ...state.incidents],
-      })),
+      set((state) => {
+        const updated = [incident, ...state.incidents];
+        return { incidents: updated };
+      }),
     updateIncident: (id, updates) =>
       set((state) => ({
         incidents: state.incidents.map((inc) =>
@@ -391,18 +386,19 @@ export const useNovaStore = create<AppState>()(
       })),
 
     // ─── Teams ──────────────────────────────────────────────
-    rescueTeams: MOCK_RESCUE_TEAMS,
+    rescueTeams: [],
     fetchTeams: async () => {
       set(s => ({ loading: { ...s.loading, teams: true } }));
       try {
         const teams = await apiFetch<RescueTeam[]>('/rescue-teams');
-        if (Array.isArray(teams) && teams.length > 0) {
+        if (Array.isArray(teams)) {
           set({ rescueTeams: teams });
         }
       } catch (err) {
-        console.warn('Backend rescue teams not available, using local store data:', err);
+        console.warn('Backend rescue teams API error:', err);
       } finally {
         set(s => ({ loading: { ...s.loading, teams: false } }));
+        get().refreshStats();
       }
     },
     updateTeam: (id, updates) =>
@@ -413,16 +409,16 @@ export const useNovaStore = create<AppState>()(
       })),
 
     // ─── Hospitals ──────────────────────────────────────────
-    hospitals: MOCK_HOSPITALS,
+    hospitals: [],
     fetchHospitals: async () => {
       set(s => ({ loading: { ...s.loading, hospitals: true } }));
       try {
         const hospitals = await apiFetch<Hospital[]>('/hospitals');
-        if (Array.isArray(hospitals) && hospitals.length > 0) {
+        if (Array.isArray(hospitals)) {
           set({ hospitals });
         }
       } catch (err) {
-        console.warn('Backend hospitals not available, using local store data:', err);
+        console.warn('Backend hospitals API error:', err);
       } finally {
         set(s => ({ loading: { ...s.loading, hospitals: false } }));
       }
@@ -435,16 +431,16 @@ export const useNovaStore = create<AppState>()(
       })),
 
     // ─── Resources ──────────────────────────────────────────
-    resources: MOCK_RESOURCES,
+    resources: [],
     fetchResources: async () => {
       set(s => ({ loading: { ...s.loading, resources: true } }));
       try {
         const resources = await apiFetch<Resource[]>('/resources');
-        if (Array.isArray(resources) && resources.length > 0) {
+        if (Array.isArray(resources)) {
           set({ resources });
         }
       } catch (err) {
-        console.warn('Backend resources not available, using local store data:', err);
+        console.warn('Backend resources API error:', err);
       } finally {
         set(s => ({ loading: { ...s.loading, resources: false } }));
       }
@@ -457,18 +453,19 @@ export const useNovaStore = create<AppState>()(
       })),
 
     // ─── Risk Predictions ────────────────────────────────────
-    riskPredictions: MOCK_RISK_PREDICTIONS,
+    riskPredictions: [],
     fetchPredictions: async () => {
       set(s => ({ loading: { ...s.loading, predictions: true } }));
       try {
         const predictions = await apiFetch<RiskPrediction[]>('/predictions');
-        if (Array.isArray(predictions) && predictions.length > 0) {
+        if (Array.isArray(predictions)) {
           set({ riskPredictions: predictions });
         }
       } catch (err) {
-        console.warn('Backend predictions not available, using local store data:', err);
+        console.warn('Backend predictions API error:', err);
       } finally {
         set(s => ({ loading: { ...s.loading, predictions: false } }));
+        get().refreshStats();
       }
     },
     updateRiskPrediction: (id, updates) =>
@@ -479,19 +476,19 @@ export const useNovaStore = create<AppState>()(
       })),
 
     // ─── Notifications ───────────────────────────────────────
-    notifications: MOCK_NOTIFICATIONS,
+    notifications: [],
     fetchNotifications: async () => {
       set(s => ({ loading: { ...s.loading, notifications: true } }));
       try {
         const notifications = await apiFetch<Notification[]>('/notifications');
-        if (Array.isArray(notifications) && notifications.length > 0) {
+        if (Array.isArray(notifications)) {
           set({
             notifications,
             unreadCount: notifications.filter((n) => !n.read).length,
           });
         }
       } catch (err) {
-        console.warn('Backend notifications not available, using local store data:', err);
+        console.warn('Backend notifications API error:', err);
       } finally {
         set(s => ({ loading: { ...s.loading, notifications: false } }));
       }
@@ -513,7 +510,7 @@ export const useNovaStore = create<AppState>()(
         notifications: state.notifications.map((n) => ({ ...n, read: true })),
         unreadCount: 0,
       })),
-    unreadCount: MOCK_NOTIFICATIONS.filter((n) => !n.read).length,
+    unreadCount: 0,
 
     // ─── Fetch All Data (called on app mount) ─────────────────
     fetchAllData: async () => {
@@ -536,9 +533,9 @@ export const useNovaStore = create<AppState>()(
       elapsedTime: 0,
       scenario: 'flood_colombo',
       incidents: [],
-      riskLevel: 82,
-      riverLevel: 4.8,
-      rainfall: 187,
+      riskLevel: 0,
+      riverLevel: 0,
+      rainfall: 0,
     },
     startSimulation: () => {
       const state = get();
@@ -570,19 +567,28 @@ export const useNovaStore = create<AppState>()(
       criticalIncidents: 0,
       peopleAffected: 0,
       teamsDeployed: 0,
-      avgResponseTime: 11.4,
-      aiPredictions: 847,
+      avgResponseTime: 0,
+      aiPredictions: 0,
     },
     refreshStats: () => {
       const state = get();
+      const activeInc = state.incidents.filter((i) => i.status !== 'resolved' && i.status !== 'closed');
+      const critInc = state.incidents.filter((i) => i.severity === 'critical' && i.status !== 'resolved');
+      const people = state.incidents.reduce((sum, i) => sum + (i.peopleAffected || 0), 0);
+      const deployed = state.rescueTeams.filter((t) => t.status !== 'available' && t.status !== 'unavailable');
+      const withEta = state.incidents.filter((i) => typeof i.eta === 'number');
+      const avgTime = withEta.length > 0
+        ? +(withEta.reduce((sum, i) => sum + (i.eta || 0), 0) / withEta.length).toFixed(1)
+        : 0;
+
       set({
         stats: {
-          activeIncidents: state.incidents.filter((i) => i.status !== 'resolved' && i.status !== 'closed').length,
-          criticalIncidents: state.incidents.filter((i) => i.severity === 'critical' && i.status !== 'resolved').length,
-          peopleAffected: state.incidents.reduce((sum, i) => sum + i.peopleAffected, 0),
-          teamsDeployed: state.rescueTeams.filter((t) => t.status !== 'available' && t.status !== 'unavailable').length,
-          avgResponseTime: 11.4,
-          aiPredictions: 847,
+          activeIncidents: activeInc.length,
+          criticalIncidents: critInc.length,
+          peopleAffected: people,
+          teamsDeployed: deployed.length,
+          avgResponseTime: avgTime,
+          aiPredictions: state.riskPredictions.length,
         },
       });
     },

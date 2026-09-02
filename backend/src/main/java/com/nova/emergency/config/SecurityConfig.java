@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -30,7 +31,7 @@ public class SecurityConfig {
     private final JwtFilter jwtFilter;
     private final UserDetailsServiceImpl userDetailsService;
 
-    @Value("${nova.cors.allowed-origins}")
+    @Value("${nova.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
 
     @Bean
@@ -40,10 +41,25 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public endpoints
+                // Public authentication endpoints
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/auth/oauth2/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
-                // All other endpoints require authentication
+                // Admin endpoints strictly require ROLE_ADMIN
+                .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
+                // Public read-only operational emergency endpoints for dashboard and live map
+                .requestMatchers(HttpMethod.GET,
+                    "/api/incidents/**",
+                    "/api/rescue-teams/**",
+                    "/api/hospitals/**",
+                    "/api/resources/**",
+                    "/api/predictions/**",
+                    "/api/notifications/**",
+                    "/api/alerts/**",
+                    "/api/events/**",
+                    "/api/analytics/**"
+                ).permitAll()
+                // All mutation and other operations require valid authenticated JWT
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())

@@ -178,27 +178,52 @@ export default function AIAnalysisPage() {
       await new Promise((r) => setTimeout(r, 400));
     }
 
-    // Return mock analysis
-    setResult(selectedIncident?.aiAnalysis || {
-      id: 'demo-analysis',
-      incidentId: 'DEMO',
-      emergencyType: 'flood',
-      severity: 'critical',
-      confidenceScore: 94,
-      peopleAffected: 5,
-      vulnerablePersons: [{ type: 'elderly', count: 1 }, { type: 'child', count: 3 }],
-      requiredResources: [
-        { type: 'Rescue Boat', quantity: 1, priority: 'immediate' },
-        { type: 'Medical Team', quantity: 1, priority: 'immediate' },
-        { type: 'Water Supply', quantity: 50, priority: 'urgent' },
-      ],
-      recommendedAction: 'Deploy nearest rescue team immediately. Priority evacuation for elderly.',
-      detectedLanguage: 'en',
-      processedAt: new Date().toISOString(),
-      inputModalities: ['text'],
-      riskFactors: ['River proximity', 'Rising water levels', 'Elderly occupant'],
-      estimatedResponseTime: 8,
-    });
+    // Dynamic intelligent analysis derived from input text or selected incident
+    if (selectedIncident?.aiAnalysis) {
+      setResult(selectedIncident.aiAnalysis);
+    } else {
+      const lower = inputText.toLowerCase();
+      const isFlood = lower.includes('flood') || lower.includes('water') || lower.includes('river');
+      const isFire = lower.includes('fire') || lower.includes('smoke') || lower.includes('burn');
+      const isLandslide = lower.includes('landslide') || lower.includes('mud') || lower.includes('slope');
+      const isMedical = lower.includes('heart') || lower.includes('bleed') || lower.includes('injured') || lower.includes('unconscious');
+
+      const type = isFlood ? 'flood' : isFire ? 'fire' : isLandslide ? 'landslide' : isMedical ? 'medical' : 'other';
+      const hasElderly = lower.includes('elderly') || lower.includes('old') || lower.includes('father') || lower.includes('mother');
+      const hasChild = lower.includes('child') || lower.includes('baby') || lower.includes('children');
+      const isCritical = hasElderly || hasChild || lower.includes('trapped') || lower.includes('cannot walk') || lower.includes('urgent');
+
+      const vulnerable = [];
+      if (hasElderly) vulnerable.push({ type: 'elderly' as const, count: 1 });
+      if (hasChild) vulnerable.push({ type: 'child' as const, count: 2 });
+
+      setResult({
+        id: `analysis-${Date.now()}`,
+        incidentId: selectedIncident?.id || 'DIRECT-REPORT',
+        emergencyType: type as any,
+        severity: isCritical ? 'critical' : 'high',
+        confidenceScore: 88,
+        peopleAffected: (hasElderly ? 1 : 0) + (hasChild ? 2 : 1),
+        vulnerablePersons: vulnerable,
+        requiredResources: [
+          { type: isFlood ? 'Rescue Boat' : 'First Aid Unit', quantity: 1, priority: 'immediate' },
+          { type: 'Medical Response Team', quantity: 1, priority: 'immediate' },
+          { type: 'Emergency Ration Pack', quantity: 10, priority: 'urgent' },
+        ],
+        recommendedAction: isCritical
+          ? 'Dispatch immediate priority rescue squad. Initiate evacuation protocols.'
+          : 'Dispatch standard response team and verify situational stability.',
+        detectedLanguage: lower.includes('හා') ? 'si' : lower.includes('இல்') ? 'ta' : 'en',
+        processedAt: new Date().toISOString(),
+        inputModalities: [inputMode],
+        riskFactors: [
+          ...(isFlood ? ['Water ingress danger'] : []),
+          ...(hasElderly ? ['Mobility-impaired occupant'] : []),
+          ...(hasChild ? ['Minors present on scene'] : []),
+        ],
+        estimatedResponseTime: isCritical ? 7 : 15,
+      });
+    }
     setAnalyzing(false);
   };
 

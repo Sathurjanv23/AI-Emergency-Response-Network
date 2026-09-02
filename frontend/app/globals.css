@@ -217,23 +217,57 @@ body {
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* Mapbox overrides */
-.mapboxgl-ctrl-bottom-left,
-.mapboxgl-ctrl-bottom-right {
-  opacity: 0.6;
+/* Leaflet Tactical Map Overrides */
+.leaflet-container {
+  background: #070b14 !important;
+  font-family: inherit !important;
 }
 
-.mapboxgl-popup-content {
+/* Dark tactical tile filter for OSM standard tiles */
+.dark-tactical-tiles .leaflet-tile-pane {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
+}
+
+.leaflet-popup-content-wrapper {
   background: #0d1629 !important;
-  border: 1px solid rgba(0,212,255,0.3) !important;
+  border: 1px solid rgba(0, 212, 255, 0.3) !important;
   border-radius: 12px !important;
   color: #e8f0fe !important;
-  padding: 16px !important;
+  padding: 8px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8) !important;
 }
 
-.mapboxgl-popup-tip {
-  border-top-color: rgba(0,212,255,0.3) !important;
-  border-bottom-color: rgba(0,212,255,0.3) !important;
+.leaflet-popup-tip {
+  background: #0d1629 !important;
+  border: 1px solid rgba(0, 212, 255, 0.3) !important;
+}
+
+.leaflet-bar {
+  border: 1px solid #1a2744 !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a {
+  background-color: #0d1629 !important;
+  border-bottom: 1px solid #1a2744 !important;
+  color: #00d4ff !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #1a2744 !important;
+  color: #ffffff !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(7, 11, 20, 0.8) !important;
+  color: #4a5a7a !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #00d4ff !important;
 }
 
 /* Print / export friendly */

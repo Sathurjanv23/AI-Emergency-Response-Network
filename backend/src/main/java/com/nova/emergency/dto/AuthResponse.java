@@ -22,6 +22,7 @@ public class AuthResponse {
         private String name;
         private String email;
         private String role;
+        private String status;
         private String phone;
         private String district;
         private String organization;
@@ -37,6 +38,7 @@ public class AuthResponse {
             dto.setName(user.getName());
             dto.setEmail(user.getEmail());
             dto.setRole(user.getRole());
+            dto.setStatus(user.getStatus() != null ? user.getStatus() : (user.isActive() ? "ACTIVE" : "DEACTIVATED"));
             dto.setPhone(user.getPhone());
             dto.setDistrict(user.getDistrict());
             dto.setOrganization(user.getOrganization());

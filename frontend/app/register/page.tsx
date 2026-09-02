@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { NovaLogo } from '@/components/shared/TopNav';
 import {
-  Eye, EyeOff, Shield, AlertTriangle, Truck, Building2, Settings,
+  Eye, EyeOff, Shield, AlertTriangle, Truck, Building2,
   Mail, Lock, User, Phone, MapPin, ArrowRight, CheckCircle, XCircle,
   Loader2, ChevronDown, RefreshCw,
 } from 'lucide-react';
@@ -18,7 +18,7 @@ import {
   signUp, signInWithGoogle,
   validateEmail, validatePassword, validateName, validatePhone,
   validateConfirmPassword, getPasswordStrength,
-  verifyEmail, resendVerificationCode,
+  verifyEmail, resendVerificationCode, SL_DISTRICTS,
 } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
 
@@ -35,23 +35,22 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-// ─── Role Config ─────────────────────────────────────────────
+// ─── Public Self-Registration Roles (Admin is strictly excluded) ─
 
-const ROLES: { value: UserRole; label: string; desc: string; icon: React.ReactNode; color: string; href: string }[] = [
-  { value: 'citizen',     label: 'Citizen',           desc: 'Report emergencies & track rescue',   icon: <Shield className="w-4 h-4" />,       color: 'border-nova-cyan/60 text-nova-cyan bg-nova-cyan/10',     href: '/citizen' },
-  { value: 'officer',     label: 'Emergency Officer', desc: 'Command center & coordination',       icon: <AlertTriangle className="w-4 h-4" />, color: 'border-purple-400/60 text-purple-400 bg-purple-400/10', href: '/command' },
-  { value: 'rescue_team', label: 'Rescue Team',       desc: 'Field operations & rescue response',  icon: <Truck className="w-4 h-4" />,         color: 'border-orange-400/60 text-orange-400 bg-orange-400/10', href: '/rescue' },
-  { value: 'hospital',    label: 'Hospital',          desc: 'Medical coordination & triage',       icon: <Building2 className="w-4 h-4" />,     color: 'border-pink-400/60 text-pink-400 bg-pink-400/10',       href: '/hospital' },
-  { value: 'admin',       label: 'Administrator',     desc: 'System management & configuration',   icon: <Settings className="w-4 h-4" />,      color: 'border-red-400/60 text-red-400 bg-red-400/10',          href: '/admin' },
+const PUBLIC_ROLES: { value: 'citizen' | 'officer' | 'rescue_team' | 'hospital'; label: string; desc: string; icon: React.ReactNode; color: string; href: string }[] = [
+  { value: 'citizen',     label: 'Citizen',           desc: 'Report emergencies & track rescue operations', icon: <Shield className="w-4 h-4" />,       color: 'border-nova-cyan/60 text-nova-cyan bg-nova-cyan/10',     href: '/citizen' },
+  { value: 'officer',     label: 'Emergency Officer', desc: 'Command center & dispatch coordination',       icon: <AlertTriangle className="w-4 h-4" />, color: 'border-purple-400/60 text-purple-400 bg-purple-400/10', href: '/command' },
+  { value: 'rescue_team', label: 'Rescue Team',       desc: 'Field response & victim extraction units',     icon: <Truck className="w-4 h-4" />,         color: 'border-orange-400/60 text-orange-400 bg-orange-400/10', href: '/rescue' },
+  { value: 'hospital',    label: 'Hospital Unit',     desc: 'Emergency triage & casualty management',       icon: <Building2 className="w-4 h-4" />,     color: 'border-pink-400/60 text-pink-400 bg-pink-400/10',       href: '/hospital' },
 ];
 
-const SL_DISTRICTS = [
-  'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
-  'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar',
-  'Mullaitivu', 'Vavuniya', 'Trincomalee', 'Batticaloa', 'Ampara',
-  'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla',
-  'Moneragala', 'Ratnapura', 'Kegalle',
-];
+const ROLE_HREF: Record<UserRole, string> = {
+  citizen: '/citizen',
+  officer: '/command',
+  rescue_team: '/rescue',
+  hospital: '/hospital',
+  admin: '/admin',
+};
 
 // ─── Field component ─────────────────────────────────────────
 
@@ -149,15 +148,26 @@ function OtpVerificationScreen({
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resendCooldown, setResendCooldown] = useState(30);
-  const [currentDemoOtp, setCurrentDemoOtp] = useState(demoOtp ?? '');
+  const [timeLeft, setTimeLeft] = useState(30);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendCooldown]);
+    inputRefs.current[0]?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const t = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(t);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [timeLeft]);
 
   const handleOtpChange = (index: number, val: string) => {
     const digit = val.replace(/\D/g, '').slice(-1);
@@ -184,6 +194,10 @@ function OtpVerificationScreen({
   };
 
   const handleVerify = async () => {
+    if (timeLeft === 0) {
+      setError('Verification code has expired. Please request a new code.');
+      return;
+    }
     const code = otp.join('');
     if (code.length < 6) { setError('Please enter the complete 6-digit code'); return; }
     setLoading(true);
@@ -191,7 +205,7 @@ function OtpVerificationScreen({
     const result = await verifyEmail(user.email, code);
     setLoading(false);
     if (!result.success) {
-      setError(result.error ?? 'Verification failed. Please try again.');
+      setError(result.error ?? 'Verification failed. Please check the code.');
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
       return;
@@ -204,15 +218,18 @@ function OtpVerificationScreen({
     setResending(true);
     const result = await resendVerificationCode(user.email);
     setResending(false);
-    setResendCooldown(30);
+    setTimeLeft(30);
     setOtp(['', '', '', '', '', '']);
     setError(null);
+    inputRefs.current[0]?.focus();
     if (result.success) {
-      toast.success('New verification code sent to your email!');
+      toast.success('New verification code sent!', { description: 'Check your email for the 6-digit code.' });
     } else {
       toast.error(result.message || 'Failed to resend verification code.');
     }
   };
+
+  const formattedTime = `00:${timeLeft < 10 ? `0${timeLeft}` : timeLeft}`;
 
   return (
     <motion.div
@@ -247,12 +264,27 @@ function OtpVerificationScreen({
             onChange={(e) => handleOtpChange(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(i, e)}
             onPaste={i === 0 ? handlePaste : undefined}
+            disabled={timeLeft === 0}
             className={cn(
-              'w-11 h-12 text-center text-lg font-bold border rounded-xl bg-nova-surface text-nova-text focus:outline-none transition-all',
+              'w-11 h-12 text-center text-lg font-bold border rounded-xl bg-nova-surface text-nova-text focus:outline-none transition-all disabled:opacity-40',
               digit ? 'border-nova-cyan bg-nova-cyan/10' : 'border-nova-border focus:border-nova-cyan/50'
             )}
           />
         ))}
+      </div>
+
+      {/* Countdown timer */}
+      <div className="text-center">
+        {timeLeft > 0 ? (
+          <p className="text-xs text-nova-text-muted">
+            Code expires in{' '}
+            <span className="font-mono font-bold text-nova-cyan">{formattedTime}</span>
+          </p>
+        ) : (
+          <p className="text-xs font-semibold text-red-400">
+            ⚠️ Verification code expired. Please request a new code.
+          </p>
+        )}
       </div>
 
       <AnimatePresence>
@@ -269,10 +301,10 @@ function OtpVerificationScreen({
       <motion.button
         id="otp-verify-btn"
         onClick={handleVerify}
-        disabled={loading || otp.join('').length < 6}
-        className="w-full bg-nova-cyan text-nova-bg font-bold py-3 rounded-xl hover:bg-nova-cyan-dim transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-        whileHover={!loading ? { scale: 1.01 } : {}}
-        whileTap={!loading ? { scale: 0.99 } : {}}
+        disabled={loading || otp.join('').length < 6 || timeLeft === 0}
+        className="w-full bg-nova-cyan text-nova-bg font-bold py-3 rounded-xl hover:bg-nova-cyan-dim transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+        whileHover={!loading && timeLeft > 0 ? { scale: 1.01 } : {}}
+        whileTap={!loading && timeLeft > 0 ? { scale: 0.99 } : {}}
       >
         {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</> : <><CheckCircle className="w-4 h-4" /> Verify &amp; Activate Account</>}
       </motion.button>
@@ -283,11 +315,11 @@ function OtpVerificationScreen({
         </button>
         <button
           onClick={handleResend}
-          disabled={resendCooldown > 0 || resending}
+          disabled={timeLeft > 0 || resending}
           className="flex items-center gap-1.5 text-nova-cyan hover:underline disabled:text-nova-text-muted disabled:no-underline transition-colors"
         >
           {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+          {timeLeft > 0 ? `Resend in ${timeLeft}s` : 'Resend code'}
         </button>
       </div>
     </motion.div>
@@ -371,7 +403,7 @@ function StepRoleProfile({ selectedRole, setSelectedRole, phone, setPhone, distr
       <div>
         <p className="text-xs font-semibold text-nova-text-muted uppercase tracking-wider mb-3">Select Your Role</p>
         <div className="space-y-2">
-          {ROLES.map((role) => (
+          {PUBLIC_ROLES.map((role) => (
             <button
               key={role.value}
               id={`reg-role-${role.value}`}
@@ -435,13 +467,8 @@ export default function RegisterPage() {
   const router = useRouter();
   const { login, isAuthenticated, currentUser } = useNovaStore();
 
-  // If already logged in, redirect
   useEffect(() => {
     if (isAuthenticated && currentUser) {
-      const ROLE_HREF: Record<UserRole, string> = {
-        citizen: '/citizen', officer: '/command', rescue_team: '/rescue',
-        hospital: '/hospital', admin: '/admin',
-      };
       router.replace(ROLE_HREF[currentUser.role] ?? '/');
     }
   }, [isAuthenticated, currentUser, router]);
@@ -458,7 +485,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   // Role & Profile
-  const [selectedRole, setSelectedRole] = useState<UserRole>('citizen');
+  const [selectedRole, setSelectedRole] = useState<'citizen' | 'officer' | 'rescue_team' | 'hospital'>('citizen');
   const [phone, setPhone] = useState('');
   const [district, setDistrict] = useState('');
 
@@ -467,6 +494,7 @@ export default function RegisterPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [conflictError, setConflictError] = useState<boolean>(false);
   const [agreed, setAgreed] = useState(false);
   const [agreedError, setAgreedError] = useState<string | null>(null);
 
@@ -487,6 +515,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError(null);
+    setConflictError(false);
 
     if (!agreed) {
       setAgreedError('You must agree to the terms to continue');
@@ -500,11 +529,21 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    const result = await signUp({ name, email, password, role: selectedRole, phone: phone || undefined, district: district || undefined });
+    const result = await signUp({
+      name,
+      email,
+      password,
+      role: selectedRole,
+      phone: phone || undefined,
+      district: district || undefined,
+    });
     setLoading(false);
 
     if (!result.success) {
-      if (result.field === 'email') {
+      if (result.statusCode === 409) {
+        setConflictError(true);
+        setGlobalError(result.error);
+      } else if (result.field === 'email') {
         setStep(1);
         setErrors((prev) => ({ ...prev, email: result.error }));
       } else if (result.field === 'password') {
@@ -519,7 +558,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Account created — needs email verification
     if (result.requiresVerification) {
       setPendingUser(result.user);
       setDemoOtp(result.demoOtp);
@@ -527,7 +565,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Shouldn't happen — always requires verification for new signups
     doLogin(result.user);
   };
 
@@ -541,29 +578,19 @@ export default function RegisterPage() {
       name: user.name,
       email: user.email,
       role: user.role,
-      language: 'en',
+      language: user.language || 'en',
       createdAt: user.createdAt,
       lastActive: user.lastActive,
       isActive: true,
     });
-    const roleConfig = ROLES.find((r) => r.value === user.role)!;
-    toast.success(`Welcome to PROJECT NOVA, ${user.name}!`, { description: 'Your account has been created successfully.' });
-    router.push(roleConfig.href);
+    toast.success(`Welcome to PROJECT NOVA, ${user.name}!`, { description: 'Your account has been activated.' });
+    router.push(ROLE_HREF[user.role] || '/');
   };
 
   const handleGoogleSignUp = async () => {
     setGoogleLoading(true);
-    const result = await signInWithGoogle();
+    await signInWithGoogle();
     setGoogleLoading(false);
-
-    if (!result.success) {
-      setGlobalError(result.error);
-      return;
-    }
-
-    // Google accounts are pre-verified — no OTP needed
-    doLogin(result.user);
-    toast.success(`Welcome to PROJECT NOVA!`, { description: 'Signed up with Google' });
   };
 
   const progressSteps = [
@@ -576,7 +603,6 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-nova-bg flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated BG */}
       <div className="absolute inset-0 hero-grid-bg opacity-20 pointer-events-none" />
       <motion.div
         className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full blur-[120px] pointer-events-none"
@@ -598,7 +624,6 @@ export default function RegisterPage() {
         transition={{ duration: 0.5 }}
       >
         <div className="nova-card border border-nova-border rounded-2xl p-8 shadow-nova">
-          {/* Header */}
           <div className="text-center mb-6">
             <div className="flex justify-center mb-3">
               <NovaLogo size="md" />
@@ -607,7 +632,6 @@ export default function RegisterPage() {
             <p className="text-xs text-nova-text-dim mt-1">Join the AI Emergency Response Network</p>
           </div>
 
-          {/* Progress Indicator */}
           <div className="flex items-center gap-1 mb-6">
             {progressSteps.map((s, idx) => (
               <div key={String(s.key)} className="flex items-center gap-1 flex-1">
@@ -629,7 +653,6 @@ export default function RegisterPage() {
             ))}
           </div>
 
-          {/* Google SSO (step 1 only) */}
           {step === 1 && (
             <>
               <motion.button
@@ -651,21 +674,26 @@ export default function RegisterPage() {
             </>
           )}
 
-          {/* Global Error */}
           <AnimatePresence>
             {globalError && (
               <motion.div
-                className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs mb-4"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs mb-4 flex items-start gap-2"
                 initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               >
-                <XCircle className="w-4 h-4 flex-shrink-0" /> {globalError}
+                <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p>{globalError}</p>
+                  {conflictError && (
+                    <Link href="/login" className="text-nova-cyan font-bold underline mt-1 inline-block">
+                      Sign in to your existing account →
+                    </Link>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Step Forms */}
           <AnimatePresence mode="wait">
-            {/* ─ OTP step ─ */}
             {step === 'otp' && pendingUser && (
               <OtpVerificationScreen
                 user={pendingUser}
@@ -675,7 +703,6 @@ export default function RegisterPage() {
               />
             )}
 
-            {/* ─ Step 1 ─ */}
             {step === 1 && (
               <motion.form
                 key="step1"
@@ -706,7 +733,6 @@ export default function RegisterPage() {
               </motion.form>
             )}
 
-            {/* ─ Step 2 ─ */}
             {step === 2 && (
               <motion.form
                 key="step2"
@@ -724,7 +750,6 @@ export default function RegisterPage() {
                   errors={errors} setErrors={setErrors}
                 />
 
-                {/* Terms */}
                 <div className="mt-5">
                   <label className={cn('flex items-start gap-3 cursor-pointer')}>
                     <div

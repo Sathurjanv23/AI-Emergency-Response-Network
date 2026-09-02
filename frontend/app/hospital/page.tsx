@@ -19,6 +19,25 @@ export default function HospitalDashboardPage() {
   const { t, localize, statusLabel } = useTranslation();
   const myHospital = hospitals.find((h) => h.id === 'h001') || hospitals[0];
 
+  if (!myHospital) {
+    return (
+      <AuthGuard allowedRoles={['hospital']}>
+        <div className="min-h-screen bg-nova-bg">
+          <TopNav role="hospital" />
+          <DashboardShell role="hospital">
+            <div className="p-12 text-center space-y-3">
+              <HeartPulse className="w-12 h-12 text-nova-text-muted mx-auto opacity-40" />
+              <h2 className="text-lg font-bold text-nova-text">No hospital capacity data available</h2>
+              <p className="text-xs text-nova-text-dim max-w-md mx-auto">
+                No active hospital facility profile is assigned or registered in the database. Real-time telemetry will appear when hospital records are connected.
+              </p>
+            </div>
+          </DashboardShell>
+        </div>
+      </AuthGuard>
+    );
+  }
+
   const bedUsagePercent = Math.round(((myHospital.totalBeds - myHospital.availableBeds) / myHospital.totalBeds) * 100);
   const icuUsagePercent = Math.round(((myHospital.icuTotal - myHospital.icuAvailable) / myHospital.icuTotal) * 100);
 
