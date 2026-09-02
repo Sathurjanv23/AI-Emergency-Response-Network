@@ -16,7 +16,6 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   LineChart, Line, Tooltip, XAxis
 } from 'recharts';
-import { MOCK_ANALYTICS } from '@/lib/mock/data';
 import { useTranslation } from '@/lib/i18n';
 
 // ─── NOVA Copilot Mini Widget ────────────────────────────────
@@ -61,7 +60,19 @@ export default function CommandCenterPage() {
   const { incidents: allIncidents, stats, rescueTeams, riskPredictions, simulation } = useNovaStore();
   const incidents = useMemo(() => allIncidents.filter((i) => i.status !== 'resolved' && i.status !== 'closed'), [allIncidents]);
   const criticalIncidents = useMemo(() => incidents.filter((i) => i.severity === 'critical'), [incidents]);
-  const trendData = useMemo(() => MOCK_ANALYTICS.responseTimeTrend.slice(-14), []);
+  
+  // Real dynamic response time trend derived from incidents
+  const trendData = useMemo(() => {
+    const valid = allIncidents
+      .filter((i) => typeof i.eta === 'number' && i.reportedAt)
+      .slice(-14)
+      .map((i) => ({
+        date: new Date(i.reportedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        avgTime: i.eta || 0,
+      }));
+    return valid;
+  }, [allIncidents]);
+
   const { t, localize, statusLabel } = useTranslation();
 
   const [mounted, setMounted] = useState(false);
@@ -158,16 +169,26 @@ export default function CommandCenterPage() {
                 ))}
               </div>
 
-              {/* Incident cards */}
+              {/* Incident cards / Empty State */}
               <div className="space-y-3">
-                {incidents.slice(0, 5).map((incident) => (
-                  <EmergencyCard
-                    key={incident.id}
-                    incident={incident}
-                    variant="feed"
-                    href={`/command/incidents`}
-                  />
-                ))}
+                {incidents.length > 0 ? (
+                  incidents.slice(0, 5).map((incident) => (
+                    <EmergencyCard
+                      key={incident.id}
+                      incident={incident}
+                      variant="feed"
+                      href={`/command/incidents`}
+                    />
+                  ))
+                ) : (
+                  <div className="p-8 rounded-xl bg-nova-surface/40 border border-nova-border/60 text-center space-y-2">
+                    <AlertTriangle className="w-8 h-8 text-nova-text-muted mx-auto opacity-40" />
+                    <p className="text-sm font-semibold text-nova-text">No active incidents currently reported</p>
+                    <p className="text-xs text-nova-text-dim max-w-sm mx-auto">
+                      All monitored zones are currently clear of active emergency reports. Incoming citizen reports will appear here in real time.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -182,14 +203,20 @@ export default function CommandCenterPage() {
                   <Activity className="w-4 h-4 text-nova-cyan" />
                   <p className="text-xs font-bold text-nova-text">{t('heading.risk_overview')}</p>
                 </div>
-                <div className="flex justify-around">
-                  {riskPredictions.slice(0, 3).map((rp) => (
-                    <div key={rp.id} className="text-center">
-                      <RiskGauge value={rp.floodRisk} size="sm" />
-                      <p className="text-[10px] text-nova-text-muted mt-1">{localize(rp.zone)}</p>
-                    </div>
-                  ))}
-                </div>
+                {riskPredictions.length > 0 ? (
+                  <div className="flex justify-around">
+                    {riskPredictions.slice(0, 3).map((rp) => (
+                      <div key={rp.id} className="text-center">
+                        <RiskGauge value={rp.floodRisk} size="sm" />
+                        <p className="text-[10px] text-nova-text-muted mt-1">{localize(rp.zone)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-xs text-nova-text-dim">
+                    No verified risk prediction available.
+                  </div>
+                )}
                 <Link href="/command/prediction" className="block text-center text-xs text-nova-cyan hover:underline mt-3">
                   {t('heading.full_prediction')} →
                 </Link>
@@ -206,10 +233,10 @@ export default function CommandCenterPage() {
                   <Clock className="w-4 h-4 text-nova-cyan" />
                   <p className="text-xs font-bold text-nova-text">{t('stats.avg_response')}</p>
                 </div>
-                <span className="text-[10px] font-mono text-nova-text-muted">Last 14 days</span>
+                <span className="text-[10px] font-mono text-nova-text-muted">Live telemetry</span>
               </div>
               <div className="h-24 flex items-center justify-center">
-                {mounted ? (
+                {mounted && trendData.length > 0 ? (
                   <LineChart width={400} height={96} data={trendData}>
                     <Tooltip
                       contentStyle={{ background: '#0d1629', border: '1px solid #1a2744', borderRadius: '8px', fontSize: '10px', color: '#e8f0fe' }}
@@ -218,7 +245,9 @@ export default function CommandCenterPage() {
                     <Line type="monotone" dataKey="avgTime" stroke="#00d4ff" strokeWidth={2} dot={false} isAnimationActive={false} />
                   </LineChart>
                 ) : (
-                  <div className="text-xs text-nova-text-dim">Loading charts...</div>
+                  <div className="text-xs text-nova-text-dim text-center py-2">
+                    {mounted ? 'No response time trend data available.' : 'Loading telemetry...'}
+                  </div>
                 )}
               </div>
             </div>
@@ -233,23 +262,29 @@ export default function CommandCenterPage() {
                 <span className="text-[10px] font-mono text-nova-text-muted">{rescueTeams.length} {t('common.active')}</span>
               </div>
               <div className="space-y-2 max-h-24 overflow-y-auto pr-1">
-                {rescueTeams.map((team) => (
-                  <div key={team.id} className="flex items-center justify-between p-1.5 rounded bg-nova-surface/50 border border-nova-border/30 text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className={cn('w-1.5 h-1.5 rounded-full', {
-                        'bg-green-400': team.status === 'available',
-                        'bg-yellow-400': team.status === 'assigned',
-                        'bg-orange-400': team.status === 'en_route',
-                        'bg-red-400': team.status === 'on_scene',
-                        'bg-gray-500': team.status === 'unavailable',
-                      })} />
-                      <span className="font-semibold text-nova-text">{localize(team.name)}</span>
+                {rescueTeams.length > 0 ? (
+                  rescueTeams.map((team) => (
+                    <div key={team.id} className="flex items-center justify-between p-1.5 rounded bg-nova-surface/50 border border-nova-border/30 text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className={cn('w-1.5 h-1.5 rounded-full', {
+                          'bg-green-400': team.status === 'available',
+                          'bg-yellow-400': team.status === 'assigned',
+                          'bg-orange-400': team.status === 'en_route',
+                          'bg-red-400': team.status === 'on_scene',
+                          'bg-gray-500': team.status === 'unavailable',
+                        })} />
+                        <span className="font-semibold text-nova-text">{localize(team.name)}</span>
+                      </div>
+                      <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded border capitalize', getTeamStatusColor(team.status))}>
+                        {statusLabel(team.status)}
+                      </span>
                     </div>
-                    <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded border capitalize', getTeamStatusColor(team.status))}>
-                      {statusLabel(team.status)}
-                    </span>
+                  ))
+                ) : (
+                  <div className="text-center py-3 text-xs text-nova-text-dim">
+                    No rescue teams currently registered.
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>

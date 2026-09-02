@@ -6,15 +6,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { NovaLogo } from '@/components/shared/TopNav';
 import {
-  Eye, EyeOff, Shield, AlertTriangle, Truck, Building2, Settings,
-  Mail, Lock, ArrowRight, CheckCircle, XCircle, Loader2, RefreshCw,
+  Eye, EyeOff, Mail, Lock, ArrowRight, CheckCircle, XCircle, Loader2, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/types';
 import { useNovaStore } from '@/lib/store/nova-store';
 import { toast } from 'sonner';
 import {
-  signIn, signInWithGoogle, signOut,
+  signIn, signInWithGoogle,
   validateEmail, validatePassword,
   verifyEmail, resendVerificationCode,
 } from '@/lib/auth';
@@ -33,22 +32,20 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-// ─── Role Configs ─────────────────────────────────────────────
+const ROLE_LABELS: Record<UserRole, string> = {
+  citizen: 'Citizen',
+  officer: 'Emergency Officer',
+  rescue_team: 'Rescue Team',
+  hospital: 'Hospital',
+  admin: 'Administrator',
+};
 
-const ROLES: { value: UserRole; label: string; desc: string; icon: React.ReactNode; color: string; href: string }[] = [
-  { value: 'citizen',     label: 'Citizen',           desc: 'Report emergencies & track response', icon: <Shield className="w-4 h-4" />,       color: 'border-nova-cyan/60 text-nova-cyan bg-nova-cyan/10',      href: '/citizen' },
-  { value: 'officer',     label: 'Emergency Officer', desc: 'Command center & coordination',       icon: <AlertTriangle className="w-4 h-4" />, color: 'border-purple-400/60 text-purple-400 bg-purple-400/10', href: '/command' },
-  { value: 'rescue_team', label: 'Rescue Team',       desc: 'Field operations & response',         icon: <Truck className="w-4 h-4" />,         color: 'border-orange-400/60 text-orange-400 bg-orange-400/10',  href: '/rescue' },
-  { value: 'hospital',    label: 'Hospital',          desc: 'Medical coordination & triage',        icon: <Building2 className="w-4 h-4" />,     color: 'border-pink-400/60 text-pink-400 bg-pink-400/10',        href: '/hospital' },
-  { value: 'admin',       label: 'Administrator',     desc: 'System management & config',          icon: <Settings className="w-4 h-4" />,      color: 'border-red-400/60 text-red-400 bg-red-400/10',           href: '/admin' },
-];
-
-const DEMO_CREDS: Record<UserRole, { email: string; password: string }> = {
-  citizen:     { email: 'citizen@nova.lk',  password: 'Demo1234' },
-  officer:     { email: 'officer@nova.lk',  password: 'Demo1234' },
-  rescue_team: { email: 'rescue@nova.lk',   password: 'Demo1234' },
-  hospital:    { email: 'hospital@nova.lk', password: 'Demo1234' },
-  admin:       { email: 'admin@nova.lk',    password: 'Demo1234' },
+const ROLE_HREF: Record<UserRole, string> = {
+  citizen: '/citizen',
+  officer: '/command',
+  rescue_team: '/rescue',
+  hospital: '/hospital',
+  admin: '/admin',
 };
 
 // ─── Field Input ─────────────────────────────────────────────
@@ -118,20 +115,28 @@ function OtpVerificationScreen({
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const [currentDemoOtp, setCurrentDemoOtp] = useState(demoOtp ?? '');
+  const [timeLeft, setTimeLeft] = useState(30);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Cooldown timer
+  // Auto-focus first input on mount
   useEffect(() => {
-    setResendCooldown(30);
+    inputRefs.current[0]?.focus();
   }, []);
 
+  // 30s countdown timer
   useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendCooldown]);
+    if (timeLeft <= 0) return;
+    const t = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(t);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [timeLeft]);
 
   const handleOtpChange = (index: number, val: string) => {
     const digit = val.replace(/\D/g, '').slice(-1);
@@ -162,6 +167,10 @@ function OtpVerificationScreen({
   };
 
   const handleVerify = async () => {
+    if (timeLeft === 0) {
+      setError('Verification code has expired. Please request a new code.');
+      return;
+    }
     const code = otp.join('');
     if (code.length < 6) {
       setError('Please enter the complete 6-digit code');
@@ -188,11 +197,18 @@ function OtpVerificationScreen({
     setResending(true);
     const result = await resendVerificationCode(user.email);
     setResending(false);
-    setResendCooldown(30);
+    setTimeLeft(30);
     setOtp(['', '', '', '', '', '']);
     setError(null);
-    toast.success('New code sent!', { description: 'Check your email for the 6-digit code.' });
+    inputRefs.current[0]?.focus();
+    if (result.success) {
+      toast.success('New code sent!', { description: 'Check your email for the 6-digit code.' });
+    } else {
+      toast.error(result.message || 'Failed to resend verification code.');
+    }
   };
+
+  const formattedTime = `00:${timeLeft < 10 ? `0${timeLeft}` : timeLeft}`;
 
   return (
     <motion.div
@@ -230,12 +246,27 @@ function OtpVerificationScreen({
             onChange={(e) => handleOtpChange(i, e.target.value)}
             onKeyDown={(e) => handleOtpKeyDown(i, e)}
             onPaste={i === 0 ? handlePaste : undefined}
+            disabled={timeLeft === 0}
             className={cn(
-              'w-11 h-12 text-center text-lg font-bold border rounded-xl bg-nova-surface text-nova-text focus:outline-none transition-all',
+              'w-11 h-12 text-center text-lg font-bold border rounded-xl bg-nova-surface text-nova-text focus:outline-none transition-all disabled:opacity-40',
               digit ? 'border-nova-cyan bg-nova-cyan/10' : 'border-nova-border focus:border-nova-cyan/50'
             )}
           />
         ))}
+      </div>
+
+      {/* Countdown timer */}
+      <div className="text-center">
+        {timeLeft > 0 ? (
+          <p className="text-xs text-nova-text-muted">
+            Code expires in{' '}
+            <span className="font-mono font-bold text-nova-cyan">{formattedTime}</span>
+          </p>
+        ) : (
+          <p className="text-xs font-semibold text-red-400">
+            ⚠️ Verification code expired. Please request a new code.
+          </p>
+        )}
       </div>
 
       {/* Error */}
@@ -254,12 +285,12 @@ function OtpVerificationScreen({
       <motion.button
         id="otp-verify-btn"
         onClick={handleVerify}
-        disabled={loading || otp.join('').length < 6}
-        className="w-full bg-nova-cyan text-nova-bg font-bold py-3 rounded-xl hover:bg-nova-cyan-dim transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-        whileHover={!loading ? { scale: 1.01 } : {}}
-        whileTap={!loading ? { scale: 0.99 } : {}}
+        disabled={loading || otp.join('').length < 6 || timeLeft === 0}
+        className="w-full bg-nova-cyan text-nova-bg font-bold py-3 rounded-xl hover:bg-nova-cyan-dim transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+        whileHover={!loading && timeLeft > 0 ? { scale: 1.01 } : {}}
+        whileTap={!loading && timeLeft > 0 ? { scale: 0.99 } : {}}
       >
-        {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</> : <><CheckCircle className="w-4 h-4" /> Verify & Sign In</>}
+        {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</> : <><CheckCircle className="w-4 h-4" /> Verify &amp; Sign In</>}
       </motion.button>
 
       {/* Resend */}
@@ -269,11 +300,11 @@ function OtpVerificationScreen({
         </button>
         <button
           onClick={handleResend}
-          disabled={resendCooldown > 0 || resending}
+          disabled={timeLeft > 0 || resending}
           className="flex items-center gap-1.5 text-nova-cyan hover:underline disabled:text-nova-text-muted disabled:no-underline transition-colors"
         >
           {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+          {timeLeft > 0 ? `Resend in ${timeLeft}s` : 'Resend code'}
         </button>
       </div>
     </motion.div>
@@ -291,10 +322,6 @@ export default function LoginPage() {
   // If already logged in, redirect
   useEffect(() => {
     if (isAuthenticated && currentUser) {
-      const ROLE_HREF: Record<UserRole, string> = {
-        citizen: '/citizen', officer: '/command', rescue_team: '/rescue',
-        hospital: '/hospital', admin: '/admin',
-      };
       router.replace(ROLE_HREF[currentUser.role] ?? '/');
     }
   }, [isAuthenticated, currentUser, router]);
@@ -303,7 +330,6 @@ export default function LoginPage() {
   const [pendingUser, setPendingUser] = useState<AuthUser | null>(null);
   const [demoOtp, setDemoOtp] = useState<string | undefined>();
 
-  const [selectedRole, setSelectedRole] = useState<UserRole>('officer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -312,13 +338,6 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
-
-  const handleRoleSelect = (role: UserRole) => {
-    setSelectedRole(role);
-    setEmailError(null);
-    setPasswordError(null);
-    setGlobalError(null);
-  };
 
   const validate = (): boolean => {
     const eErr = validateEmail(email);
@@ -372,9 +391,9 @@ export default function LoginPage() {
       isActive: true,
     });
 
-    const roleConfig = ROLES.find((r) => r.value === user.role)!;
-    toast.success(`Welcome back, ${user.name}!`, { description: `Signed in as ${roleConfig.label}` });
-    router.push(roleConfig.href);
+    const roleLabel = ROLE_LABELS[user.role] || 'User';
+    toast.success(`Welcome back, ${user.name}!`, { description: `Signed in as ${roleLabel}` });
+    router.push(ROLE_HREF[user.role] || '/');
   };
 
   const handleGoogleSignIn = async () => {
@@ -391,11 +410,6 @@ export default function LoginPage() {
     // Google accounts are always pre-verified
     doLogin(result.user);
     toast.success('Signed in with Google!', { description: `Welcome, ${result.user.name}` });
-  };
-
-  const ROLE_HREF: Record<UserRole, string> = {
-    citizen: '/citizen', officer: '/command', rescue_team: '/rescue',
-    hospital: '/hospital', admin: '/admin',
   };
 
   return (
@@ -416,7 +430,7 @@ export default function LoginPage() {
       />
 
       <motion.div
-        className="w-full max-w-lg relative"
+        className="w-full max-w-md relative"
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -473,34 +487,6 @@ export default function LoginPage() {
                   <div className="flex-1 h-px bg-nova-border" />
                   <span className="text-[10px] text-nova-text-muted uppercase tracking-wider">or sign in with email</span>
                   <div className="flex-1 h-px bg-nova-border" />
-                </div>
-
-                {/* Role Selector */}
-                <div className="mb-5">
-                  <p className="text-xs font-semibold text-nova-text-muted uppercase tracking-wider mb-2.5">Your Role</p>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {ROLES.map((role) => (
-                      <button
-                        key={role.value}
-                        id={`role-${role.value}`}
-                        type="button"
-                        onClick={() => handleRoleSelect(role.value)}
-                        title={role.label}
-                        className={cn(
-                          'flex flex-col items-center gap-1 p-2 rounded-xl border transition-all text-center',
-                          selectedRole === role.value
-                            ? role.color
-                            : 'border-nova-border text-nova-text-muted hover:border-nova-border2 hover:text-nova-text'
-                        )}
-                      >
-                        {role.icon}
-                        <span className="text-[9px] font-semibold leading-tight">{role.label.split(' ')[0]}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-nova-text-muted mt-1.5 text-center">
-                    Selected: <span className="text-nova-text">{ROLES.find(r => r.value === selectedRole)?.label}</span>
-                  </p>
                 </div>
 
                 {/* Global Error */}

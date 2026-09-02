@@ -1,11 +1,13 @@
 package com.nova.emergency.service;
 
+import com.nova.emergency.controller.SseController;
 import com.nova.emergency.model.Incident;
 import com.nova.emergency.model.AuditLog;
 import com.nova.emergency.repository.IncidentRepository;
 import com.nova.emergency.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -54,6 +56,10 @@ public class IncidentService {
 
         Incident saved = incidentRepository.save(incident);
         log.info("Incident created: {}", saved.getId());
+
+        // Broadcast real-time SSE event to all connected Command Center clients
+        SseController.broadcastIncidentCreated(saved);
+
         return saved;
     }
 
@@ -69,7 +75,12 @@ public class IncidentService {
         if (data.containsKey("priority")) incident.setPriority((Integer) data.get("priority"));
         incident.setUpdatedAt(Instant.now().toString());
 
-        return incidentRepository.save(incident);
+        Incident updated = incidentRepository.save(incident);
+
+        // Broadcast real-time SSE event
+        SseController.broadcastIncidentUpdated(updated);
+
+        return updated;
     }
 
     public Incident assignTeam(String incidentId, String teamId, String teamName, String officerEmail) {
@@ -98,7 +109,9 @@ public class IncidentService {
         logAudit(officerEmail, "ASSIGN_TEAM", "incident", incidentId,
             "Assigned team " + teamName + " to incident " + incidentId);
 
-        return incidentRepository.save(incident);
+        Incident saved = incidentRepository.save(incident);
+        SseController.broadcastIncidentUpdated(saved);
+        return saved;
     }
 
     public Incident escalate(String id, String reason, String officerEmail) {
@@ -119,7 +132,9 @@ public class IncidentService {
         logAudit(officerEmail, "ESCALATE_INCIDENT", "incident", id,
             "Escalated from " + currentSeverity + " to " + newSeverity + ". Reason: " + reason);
 
-        return incidentRepository.save(incident);
+        Incident escalated = incidentRepository.save(incident);
+        SseController.broadcastIncidentUpdated(escalated);
+        return escalated;
     }
 
     public Incident resolve(String id, String resolution, String officerEmail) {
@@ -142,7 +157,9 @@ public class IncidentService {
         }
 
         logAudit(officerEmail, "RESOLVE_INCIDENT", "incident", id, "Incident resolved: " + resolution);
-        return incidentRepository.save(incident);
+        Incident resolved = incidentRepository.save(incident);
+        SseController.broadcastIncidentUpdated(resolved);
+        return resolved;
     }
 
     private void logAudit(String userEmail, String action, String resource, String resourceId, String details) {

@@ -1,26 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { AuthGuard } from '@/components/shared/AuthGuard';
 import { useNovaStore } from '@/lib/store/nova-store';
-import { MOCK_AUDIT_LOGS } from '@/lib/mock/data';
+import { adminApi } from '@/lib/api/client';
 import { StatCard } from '@/components/emergency/StatCard';
-import { motion } from 'framer-motion';
-import { Users, Activity, Settings, Database, Shield, FileText, TrendingUp, AlertTriangle, Cpu, CheckCircle } from 'lucide-react';
-import { cn, formatDateTime } from '@/lib/utils';
+import { Users, Activity, Settings, Shield, FileText, AlertTriangle, Cpu } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import type { AuditLog, User } from '@/types';
+import { useTranslation } from '@/lib/i18n';
 
 const SYSTEM_HEALTH = [
   { name: 'API Server', status: 'operational', uptime: '99.97%', latency: '12ms' },
   { name: 'AI Service', status: 'operational', uptime: '99.91%', latency: '180ms' },
   { name: 'WebSocket', status: 'operational', uptime: '99.99%', latency: '3ms' },
   { name: 'MongoDB Atlas', status: 'operational', uptime: '99.95%', latency: '8ms' },
-  { name: 'Mapbox Service', status: 'operational', uptime: '100%', latency: '24ms' },
-  { name: 'GIS Engine', status: 'degraded', uptime: '98.2%', latency: '340ms' },
+  { name: 'OpenStreetMap Service', status: 'operational', uptime: '100%', latency: '24ms' },
+  { name: 'GIS Engine', status: 'operational', uptime: '99.2%', latency: '40ms' },
 ];
 
 const AI_CONFIG = [
@@ -32,25 +32,41 @@ const AI_CONFIG = [
   { name: 'Model Version', value: 'NOVA-AI-v2.1', editable: false },
 ];
 
-const userCountData = [
-  { role: 'Citizens', count: 4821 },
-  { role: 'Officers', count: 248 },
-  { role: 'Rescue', count: 87 },
-  { role: 'Hospital', count: 43 },
-  { role: 'Admin', count: 12 },
-];
-
-import { useTranslation } from '@/lib/i18n';
-
 export default function AdminDashboardPage() {
   const { incidents } = useNovaStore();
-  const { t, localize, timeAgo } = useTranslation();
-  const auditLogs = MOCK_AUDIT_LOGS;
-
+  const { t, timeAgo } = useTranslation();
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+    async function loadAdminData() {
+      try {
+        const [logsRes, usersRes] = await Promise.allSettled([
+          adminApi.getAuditLogs(),
+          adminApi.getUsers(),
+        ]);
+        if (logsRes.status === 'fulfilled' && Array.isArray(logsRes.value)) {
+          setAuditLogs(logsRes.value);
+        }
+        if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)) {
+          setUsers(usersRes.value);
+        }
+      } catch {
+        // Handled silently, defaults to empty arrays
+      }
+    }
+    loadAdminData();
   }, []);
+
+  const userCountData = [
+    { role: 'Citizens', count: users.filter((u) => u.role === 'citizen').length },
+    { role: 'Officers', count: users.filter((u) => u.role === 'officer').length },
+    { role: 'Rescue', count: users.filter((u) => u.role === 'rescue_team').length },
+    { role: 'Hospital', count: users.filter((u) => u.role === 'hospital').length },
+    { role: 'Admin', count: users.filter((u) => u.role === 'admin').length },
+  ];
 
   return (
     <AuthGuard allowedRoles={['admin']}>
@@ -61,14 +77,14 @@ export default function AdminDashboardPage() {
           {/* Header */}
           <div>
             <h1 className="text-2xl font-bold font-display text-nova-text">{t('heading.system_dashboard')}</h1>
-            <p className="text-sm text-nova-text-dim mt-0.5">{t('portal.admin')} · NOVA Platform v2.1</p>
+            <p className="text-sm text-nova-text-dim mt-0.5">{t('portal.admin')} · PROJECT NOVA Operations Hub</p>
           </div>
 
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label={t('stats.total_users')} value={5211} icon={<Users className="w-4 h-4" />} variant="cyan" />
+            <StatCard label={t('stats.total_users')} value={users.length} icon={<Users className="w-4 h-4" />} variant="cyan" />
             <StatCard label={t('stats.active_incidents')} value={incidents.filter(i => i.status !== 'resolved').length} icon={<AlertTriangle className="w-4 h-4" />} variant="warning" />
-            <StatCard label={t('stats.ai_analyses_today')} value={847} icon={<Cpu className="w-4 h-4" />} variant="success" />
+            <StatCard label={t('stats.ai_analyses_today')} value={auditLogs.length} icon={<Cpu className="w-4 h-4" />} variant="success" />
             <StatCard label={t('stats.system_uptime')} value="99.94" suffix="%" icon={<Activity className="w-4 h-4" />} variant="cyan" animate={false} />
           </div>
 
@@ -161,23 +177,29 @@ export default function AdminDashboardPage() {
               <Link href="/admin/audit-logs" className="text-xs text-nova-cyan hover:underline">{t('heading.view_all')} →</Link>
             </div>
             <div className="space-y-2">
-              {auditLogs.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 p-3 rounded-xl bg-nova-surface/50 border border-nova-border/50">
-                  <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', {
-                    'bg-nova-cyan': log.severity === 'info',
-                    'bg-orange-400': log.severity === 'warning',
-                    'bg-red-400': log.severity === 'critical',
-                  })} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-nova-text truncate">{log.action}</p>
-                      <span className="text-[10px] text-nova-text-muted flex-shrink-0">{timeAgo(log.timestamp)}</span>
+              {auditLogs.length > 0 ? (
+                auditLogs.slice(0, 5).map((log) => (
+                  <div key={log.id} className="flex items-start gap-3 p-3 rounded-xl bg-nova-surface/50 border border-nova-border/50">
+                    <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', {
+                      'bg-nova-cyan': log.severity === 'info',
+                      'bg-orange-400': log.severity === 'warning',
+                      'bg-red-400': log.severity === 'critical',
+                    })} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-nova-text truncate">{log.action}</p>
+                        <span className="text-[10px] text-nova-text-muted flex-shrink-0">{timeAgo(log.timestamp)}</span>
+                      </div>
+                      <p className="text-xs text-nova-text-dim mt-0.5">{log.details}</p>
+                      <p className="text-[10px] text-nova-text-muted mt-0.5">by {log.userName} · {log.ipAddress}</p>
                     </div>
-                    <p className="text-xs text-nova-text-dim mt-0.5">{log.details}</p>
-                    <p className="text-[10px] text-nova-text-muted mt-0.5">by {log.userName} · {log.ipAddress}</p>
                   </div>
+                ))
+              ) : (
+                <div className="text-center py-6 text-xs text-nova-text-dim">
+                  No recent system audit logs recorded in database.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 

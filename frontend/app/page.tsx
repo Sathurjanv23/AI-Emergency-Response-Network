@@ -186,7 +186,7 @@ function HeroMapVisual() {
 
 const FEATURES = [
   { icon: <Brain className="w-6 h-6" />, title: 'Multimodal AI', desc: 'Understands text, voice, and image emergency reports in English, Tamil, and Sinhala.', color: 'from-purple-500/20 to-purple-600/5 border-purple-500/20' },
-  { icon: <Map className="w-6 h-6" />, title: 'Live GIS Command', desc: 'Real-time Mapbox integration plotting all incidents, teams, and risk zones.', color: 'from-nova-cyan/20 to-nova-cyan/5 border-nova-cyan/20' },
+  { icon: <Map className="w-6 h-6" />, title: 'Live GIS Command', desc: 'Real-time interactive GIS integration plotting all incidents, teams, and risk zones.', color: 'from-nova-cyan/20 to-nova-cyan/5 border-nova-cyan/20' },
   { icon: <TrendingUp className="w-6 h-6" />, title: 'Predictive Intelligence', desc: 'ML models predict flood and landslide risk up to 6 hours in advance.', color: 'from-blue-500/20 to-blue-600/5 border-blue-500/20' },
   { icon: <Zap className="w-6 h-6" />, title: 'Smart Prioritization', desc: 'AI ranks all incidents by severity, vulnerability, and resource availability.', color: 'from-orange-500/20 to-orange-600/5 border-orange-500/20' },
   { icon: <Users className="w-6 h-6" />, title: 'Multi-Role Coordination', desc: 'Connects citizens, officers, rescue teams, and hospitals in one platform.', color: 'from-green-500/20 to-green-600/5 border-green-500/20' },

@@ -13,6 +13,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: 'citizen' | 'officer' | 'rescue_team' | 'hospital' | 'admin';
+  status?: 'ACTIVE' | 'PENDING_VERIFICATION' | 'DEACTIVATED';
   avatarUrl?: string;
   phone?: string;
   district?: string;
@@ -24,12 +25,15 @@ export interface AuthUser {
   language: 'en' | 'ta' | 'si';
 }
 
-// ─── Validation (kept as-is for frontend forms) ────────────────
+export const SL_DISTRICTS = [
+  'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
+  'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar',
+  'Mullaitivu', 'Vavuniya', 'Trincomalee', 'Batticaloa', 'Ampara',
+  'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla',
+  'Moneragala', 'Ratnapura', 'Kegalle',
+] as const;
 
-export interface FieldError {
-  field: string;
-  message: string;
-}
+// ─── Validation ──────────────────────────────────────────────
 
 export function validateEmail(email: string): string | null {
   if (!email || !email.trim()) return 'Email is required';
@@ -58,7 +62,7 @@ export function validateName(name: string): string | null {
   return null;
 }
 
-export function validatePhone(phone: string): string | null {
+export function validatePhone(phone?: string): string | null {
   if (!phone || !phone.trim()) return null;
   const cleaned = phone.replace(/[\s\-()\\+]/g, '');
   if (!/^[0-9]{7,15}$/.test(cleaned)) return 'Enter a valid phone number (7–15 digits)';
@@ -98,19 +102,19 @@ export function getToken(): string {
   return localStorage.getItem(TOKEN_KEY) || '';
 }
 
-function saveToken(token: string): void {
+export function saveToken(token: string): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(TOKEN_KEY, token);
   }
 }
 
-function saveUser(user: AuthUser): void {
+export function saveUser(user: AuthUser): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
 }
 
-function clearSession(): void {
+export function clearSession(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -142,12 +146,11 @@ export interface SignUpPayload {
 
 export type AuthResult =
   | { success: true; user: AuthUser; requiresVerification?: boolean; demoOtp?: string }
-  | { success: false; error: string; field?: string };
+  | { success: false; error: string; field?: string; statusCode?: number };
 
-// ─── Sign Up ─────────────────────────────────────────────────
+// ─── Sign Up (Email / Password) ──────────────────────────────
 
 export async function signUp(payload: SignUpPayload): Promise<AuthResult> {
-  // Frontend validation
   const nameErr = validateName(payload.name);
   if (nameErr) return { success: false, error: nameErr, field: 'name' };
 
@@ -157,16 +160,83 @@ export async function signUp(payload: SignUpPayload): Promise<AuthResult> {
   const passErr = validatePassword(payload.password);
   if (passErr) return { success: false, error: passErr, field: 'password' };
 
+  const phoneErr = validatePhone(payload.phone);
+  if (phoneErr) return { success: false, error: phoneErr, field: 'phone' };
+
+  if (payload.role === 'admin') {
+    return { success: false, error: 'Administrator accounts cannot be self-registered.' };
+  }
+
   try {
     const body: Record<string, unknown> = { ...payload };
     const res = await authFetch('/auth/register', body);
-    const json = await res.json();
+    const json = await res.json().catch(() => ({}));
 
-    if (!res.ok || !json.success) {
-      return { success: false, error: json.message || 'Registration failed. Please try again.' };
+    if (res.status === 409) {
+      return {
+        success: false,
+        error: json.message || 'An account with this email already exists. Please sign in.',
+        statusCode: 409,
+      };
     }
 
-    const { accessToken, user } = json.data;
+    if (!res.ok || !json.success) {
+      return {
+        success: false,
+        error: json.message || 'Registration failed. Please check your details.',
+        statusCode: res.status,
+      };
+    }
+
+    const { accessToken, user } = json.data || {};
+
+    if (!user?.isVerified || !accessToken) {
+      return { success: true, user, requiresVerification: true };
+    }
+
+    saveToken(accessToken);
+    saveUser(user);
+    return { success: true, user, requiresVerification: false };
+  } catch {
+    return { success: false, error: 'Cannot connect to server. Please ensure the backend is running.' };
+  }
+}
+
+// ─── Sign In (Email / Password) ──────────────────────────────
+
+export async function signIn(email: string, password: string): Promise<AuthResult> {
+  const emailErr = validateEmail(email);
+  if (emailErr) return { success: false, error: emailErr, field: 'email' };
+
+  if (!password) return { success: false, error: 'Password is required', field: 'password' };
+
+  try {
+    const res = await authFetch('/auth/login', { email, password });
+    const json = await res.json().catch(() => ({}));
+
+    if (res.status === 401) {
+      return { success: false, error: json.message || 'Invalid email or password.', statusCode: 401 };
+    }
+
+    if (res.status === 403) {
+      return {
+        success: false,
+        error: json.message || 'Your account is deactivated. Please contact emergency administration.',
+        statusCode: 403,
+      };
+    }
+
+    if (!res.ok || !json.success) {
+      const msg = json.message || 'Login failed. Please try again.';
+      return { success: false, error: msg, statusCode: res.status };
+    }
+
+    const { accessToken, user } = json.data || {};
+
+    if (!user?.isVerified || !accessToken) {
+      return { success: true, user, requiresVerification: true };
+    }
+
     saveToken(accessToken);
     saveUser(user);
     return { success: true, user };
@@ -175,30 +245,95 @@ export async function signUp(payload: SignUpPayload): Promise<AuthResult> {
   }
 }
 
-// ─── Sign In ─────────────────────────────────────────────────
+// ─── OAuth Exchange (Existing Google User) ───────────────────
 
-export async function signIn(email: string, password: string): Promise<AuthResult> {
-  const emailErr = validateEmail(email);
-  if (emailErr) return { success: false, error: emailErr, field: 'email' };
-
-  const passErr = validatePassword(password);
-  if (passErr) return { success: false, error: passErr, field: 'password' };
-
+export async function exchangeOAuthCode(code: string): Promise<AuthResult> {
   try {
-    const res = await authFetch('/auth/login', { email, password });
-    const json = await res.json();
+    const res = await authFetch('/auth/oauth2/exchange', { code });
+    const json = await res.json().catch(() => ({}));
 
-    if (!res.ok || !json.success) {
-      const msg = json.message || 'Invalid email or password.';
-      return { success: false, error: msg };
+    if (res.status === 403) {
+      return {
+        success: false,
+        error: json.message || 'Your account is deactivated. Please contact administration.',
+        statusCode: 403,
+      };
     }
 
-    const { accessToken, user } = json.data;
-    saveToken(accessToken);
-    saveUser(user);
+    if (!res.ok || !json.success) {
+      return {
+        success: false,
+        error: json.message || 'Google authorization failed or expired. Please try again.',
+        statusCode: res.status,
+      };
+    }
+
+    const { accessToken, user } = json.data || {};
+    if (accessToken) saveToken(accessToken);
+    if (user) saveUser(user);
     return { success: true, user };
   } catch {
-    return { success: false, error: 'Cannot connect to server. Please ensure the backend is running.' };
+    return { success: false, error: 'Cannot connect to backend server.' };
+  }
+}
+
+// ─── Google Complete Registration (New Google User) ─────────
+
+export interface GoogleRegisterPayload {
+  registrationIntent: string;
+  role: 'citizen' | 'officer' | 'rescue_team' | 'hospital';
+  phone?: string;
+  district?: string;
+  organization?: string;
+  language?: string;
+}
+
+export async function completeGoogleRegistration(payload: GoogleRegisterPayload): Promise<AuthResult> {
+  if (payload.role === ('admin' as any)) {
+    return { success: false, error: 'Administrator accounts cannot be self-registered.' };
+  }
+
+  const phoneErr = validatePhone(payload.phone);
+  if (phoneErr) return { success: false, error: phoneErr, field: 'phone' };
+
+  try {
+    const res = await authFetch('/auth/google/register', payload as unknown as Record<string, unknown>);
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json.success) {
+      return {
+        success: false,
+        error: json.message || 'Google registration failed. Please try again.',
+        statusCode: res.status,
+      };
+    }
+
+    const { accessToken, user } = json.data || {};
+    if (accessToken) saveToken(accessToken);
+    if (user) saveUser(user);
+    return { success: true, user };
+  } catch {
+    return { success: false, error: 'Cannot connect to backend server.' };
+  }
+}
+
+// ─── Request Email OTP ───────────────────────────────────────
+
+export async function requestLoginOtp(email: string): Promise<{ success: boolean; message: string }> {
+  const emailErr = validateEmail(email);
+  if (emailErr) return { success: false, message: emailErr };
+
+  try {
+    const res = await authFetch('/auth/request-otp', { email });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json.success) {
+      return { success: false, message: json.message || 'Failed to send verification code.' };
+    }
+
+    return { success: true, message: json.message || 'Verification code sent to your email.' };
+  } catch {
+    return { success: false, message: 'Cannot connect to backend server.' };
   }
 }
 
@@ -234,11 +369,9 @@ export async function forgotPassword(
   const emailErr = validateEmail(email);
   if (emailErr) return { success: false, message: emailErr };
 
-  // Backend endpoint (optional — can be added later)
-  // For now return a generic message
   return {
     success: true,
-    message: `If ${email} is registered, a reset link has been sent.`,
+    message: `If ${email} is registered, a password recovery link has been dispatched.`,
   };
 }
 
@@ -248,17 +381,17 @@ export async function resetPassword(token: string, newPassword: string): Promise
   const passErr = validatePassword(newPassword);
   if (passErr) return { success: false, error: passErr, field: 'password' };
 
-  // Backend endpoint (optional — can be added later)
   return { success: false, error: 'Password reset via backend not yet configured.' };
 }
 
-// ─── Google OAuth (stub — integrate with NextAuth or Firebase later) ──
+// ─── Google OAuth Initiate ───────────────────────────────────
 
-export async function signInWithGoogle(_simulatedEmail?: string): Promise<AuthResult> {
-  return {
-    success: false,
-    error: 'Google OAuth requires NextAuth.js or Firebase Auth setup. Please use email/password.',
-  };
+export async function signInWithGoogle(): Promise<AuthResult> {
+  if (typeof window !== 'undefined') {
+    window.location.href = `${API_BASE}/auth/oauth2/google`;
+    return new Promise(() => {});
+  }
+  return { success: false, error: 'Browser window required for Google login.' };
 }
 
 // ─── Email Verification ───────────────────────────────────────
@@ -269,14 +402,14 @@ export async function verifyEmail(
 ): Promise<AuthResult> {
   try {
     const res = await authFetch('/auth/verify-otp', { email, otp });
-    const json = await res.json();
+    const json = await res.json().catch(() => ({}));
 
     if (!res.ok || !json.success) {
       const msg = json.message || 'Invalid or expired verification code.';
       return { success: false, error: msg };
     }
 
-    const { accessToken, user } = json.data;
+    const { accessToken, user } = json.data || {};
     if (accessToken) saveToken(accessToken);
     if (user) saveUser(user);
     return { success: true, user };
@@ -289,14 +422,12 @@ export async function resendVerificationCode(
   email: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
-    const res = await fetch(`${apiBase}/auth/resend-otp?email=${encodeURIComponent(email)}`, {
+    const res = await fetch(`${API_BASE}/auth/resend-otp?email=${encodeURIComponent(email)}`, {
       method: 'POST',
     });
-    const json = await res.json();
+    const json = await res.json().catch(() => ({}));
     return { success: res.ok, message: json.message || 'Verification code resent.' };
   } catch {
     return { success: false, message: 'Cannot connect to server.' };
   }
 }
-

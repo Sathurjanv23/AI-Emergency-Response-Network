@@ -18,6 +18,26 @@ export default function RescueDashboardPage() {
   const { rescueTeams, incidents, updateTeam, updateIncident } = useNovaStore();
   const { t, localize, statusLabel } = useTranslation();
   const myTeam = rescueTeams.find((t) => t.id === 'RT-ALPHA-02') || rescueTeams[0];
+
+  if (!myTeam) {
+    return (
+      <AuthGuard allowedRoles={['rescue_team']}>
+        <div className="min-h-screen bg-nova-bg">
+          <TopNav role="rescue_team" />
+          <DashboardShell role="rescue_team">
+            <div className="p-12 text-center space-y-3">
+              <Navigation className="w-12 h-12 text-nova-text-muted mx-auto opacity-40" />
+              <h2 className="text-lg font-bold text-nova-text">No rescue teams currently registered</h2>
+              <p className="text-xs text-nova-text-dim max-w-md mx-auto">
+                No active rescue team profile is assigned or registered in the database. Deployed squads and active incident assignments will appear here in real time.
+              </p>
+            </div>
+          </DashboardShell>
+        </div>
+      </AuthGuard>
+    );
+  }
+
   const assignedIncident = incidents.find((i) => i.id === myTeam.currentIncident);
 
   const handleStatusChange = (status: 'available' | 'en_route' | 'on_scene') => {
