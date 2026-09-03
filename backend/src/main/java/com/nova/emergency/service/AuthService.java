@@ -124,28 +124,10 @@ public class AuthService {
         validatePhone(request.getPhone());
         validateDistrict(request.getDistrict());
 
-        // 6. Check duplicate email in DB
+        // 6. Check duplicate email in DB (case-insensitive normalized)
         Optional<User> existingOpt = userRepository.findByEmail(email);
         if (existingOpt.isPresent()) {
-            User existing = existingOpt.get();
-            if (existing.isVerified()) {
-                throw new AccountConflictException("An account with this email already exists. Please sign in.");
-            }
-            // User exists but was never verified — update details and resend OTP
-            existing.setName(request.getName().trim());
-            existing.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-            existing.setRole(role);
-            existing.setStatus("citizen".equals(role) ? "ACTIVE" : "PENDING_VERIFICATION");
-            existing.setPhone(request.getPhone());
-            existing.setDistrict(request.getDistrict());
-            existing.setOrganization(request.getOrganization());
-            existing.setLanguage(request.getLanguage() != null ? request.getLanguage() : "en");
-            existing.setLastActive(Instant.now().toString());
-
-            String rawOtp = issueOtp(existing);
-            userRepository.save(existing);
-            emailService.sendOtpEmail(email, rawOtp, existing.getName());
-            return buildPendingVerificationResponse(existing);
+            throw new AccountConflictException("An account with this email already exists.");
         }
 
         User user = new User();
@@ -153,14 +135,14 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(role);
-        user.setStatus("citizen".equals(role) ? "ACTIVE" : "PENDING_VERIFICATION");
+        user.setStatus("PENDING_VERIFICATION");
         user.setPhone(request.getPhone());
         user.setDistrict(request.getDistrict());
         user.setOrganization(request.getOrganization());
         user.setLanguage(request.getLanguage() != null ? request.getLanguage() : "en");
         user.setCreatedAt(Instant.now().toString());
         user.setLastActive(Instant.now().toString());
-        user.setActive(true);
+        user.setActive(false);
         user.setVerified(false);
         user.setProvider("email");
 
@@ -182,7 +164,7 @@ public class AuthService {
             throw new BadCredentialsException("Password is required.");
         }
 
-        String email = request.getEmail().toLowerCase().trim();
+        String email = validateAndNormalizeEmail(request.getEmail());
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password."));
 
@@ -191,17 +173,17 @@ public class AuthService {
             throw new BadCredentialsException("Invalid email or password.");
         }
 
-        // Check account activation
-        if (!user.isActive() || "DEACTIVATED".equalsIgnoreCase(user.getStatus())) {
-            throw new AccountDeactivatedException("Your account is deactivated. Please contact emergency administration.");
-        }
-
-        // Check email verification
+        // Check email verification before allowing login
         if (!user.isVerified()) {
             String rawOtp = issueOtp(user);
             userRepository.save(user);
             emailService.sendOtpEmail(user.getEmail(), rawOtp, user.getName());
             throw new IllegalArgumentException("Your email is not verified. A new verification code was sent to " + user.getEmail());
+        }
+
+        // Check account activation
+        if (!user.isActive() || "DEACTIVATED".equalsIgnoreCase(user.getStatus())) {
+            throw new AccountDeactivatedException("Your account is deactivated. Please contact emergency administration.");
         }
 
         // Update last active
@@ -355,28 +337,36 @@ public class AuthService {
 
     public AuthResponse verifyOtp(VerifyOtpRequest request) {
         String email = validateAndNormalizeEmail(request.getEmail());
-        String inputOtp = request.getOtp().trim();
+        String inputOtp = request.getOtp() != null ? request.getOtp().trim() : "";
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("No account found for this email address."));
 
-        if (user.getOtpHash() == null) {
-            throw new IllegalArgumentException("No verification code is active for this account. Please request a new code.");
+        if (user.isVerified()) {
+            throw new IllegalArgumentException("Account is already verified. Please sign in.");
         }
 
-        if (user.getOtpExpiresAt() != null && user.getOtpExpiresAt().isBefore(Instant.now())) {
+        if (user.getOtpHash() == null || user.getOtpExpiresAt() == null) {
+            throw new IllegalArgumentException("Invalid OTP.");
+        }
+
+        // Enforce exact 30-second server-side OTP expiration
+        if (user.getOtpExpiresAt().isBefore(Instant.now())) {
             user.setOtpHash(null);
             user.setOtpExpiresAt(null);
             userRepository.save(user);
-            throw new IllegalArgumentException("Verification code has expired. Please request a new code.");
+            throw new IllegalArgumentException("OTP has expired. Please request a new OTP.");
         }
 
         String inputHash = hashOtp(inputOtp);
-        if (!inputHash.equals(user.getOtpHash())) {
-            throw new IllegalArgumentException("Invalid verification code. Please check and try again.");
+        if (!MessageDigest.isEqual(inputHash.getBytes(StandardCharsets.UTF_8), user.getOtpHash().getBytes(StandardCharsets.UTF_8))) {
+            throw new IllegalArgumentException("Invalid OTP.");
         }
 
+        // Immediately invalidate OTP upon successful verification (one-time use)
         user.setVerified(true);
+        user.setStatus("ACTIVE");
+        user.setActive(true);
         user.setOtpHash(null);
         user.setOtpExpiresAt(null);
         user.setOtpAttempts(0);

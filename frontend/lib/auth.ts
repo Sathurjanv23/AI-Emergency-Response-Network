@@ -175,7 +175,7 @@ export async function signUp(payload: SignUpPayload): Promise<AuthResult> {
     if (res.status === 409) {
       return {
         success: false,
-        error: json.message || 'An account with this email already exists. Please sign in.',
+        error: json.message || 'An account with this email already exists.',
         statusCode: 409,
       };
     }
