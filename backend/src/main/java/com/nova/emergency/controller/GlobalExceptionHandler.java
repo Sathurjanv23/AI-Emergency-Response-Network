@@ -32,6 +32,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler({
+        org.springframework.dao.DuplicateKeyException.class,
+        org.springframework.dao.DataIntegrityViolationException.class,
+        com.mongodb.MongoWriteException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleDuplicateKey(Exception ex) {
+        log.warn("Database constraint / duplicate key violation: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("An account with this email already exists."));
+    }
+
     @ExceptionHandler(AccountDeactivatedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccountDeactivated(AccountDeactivatedException ex) {
         log.warn("Account deactivated: {}", ex.getMessage());

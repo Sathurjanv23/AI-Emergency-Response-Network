@@ -195,7 +195,7 @@ function OtpVerificationScreen({
 
   const handleVerify = async () => {
     if (timeLeft === 0) {
-      setError('Verification code has expired. Please request a new code.');
+      setError('OTP has expired. Please request a new OTP.');
       return;
     }
     const code = otp.join('');
@@ -205,7 +205,7 @@ function OtpVerificationScreen({
     const result = await verifyEmail(user.email, code);
     setLoading(false);
     if (!result.success) {
-      setError(result.error ?? 'Verification failed. Please check the code.');
+      setError(result.error ?? 'Invalid OTP.');
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
       return;
@@ -228,8 +228,6 @@ function OtpVerificationScreen({
       toast.error(result.message || 'Failed to resend verification code.');
     }
   };
-
-  const formattedTime = `00:${timeLeft < 10 ? `0${timeLeft}` : timeLeft}`;
 
   return (
     <motion.div
@@ -277,12 +275,12 @@ function OtpVerificationScreen({
       <div className="text-center">
         {timeLeft > 0 ? (
           <p className="text-xs text-nova-text-muted">
-            Code expires in{' '}
-            <span className="font-mono font-bold text-nova-cyan">{formattedTime}</span>
+            OTP expires in{' '}
+            <span className="font-mono font-bold text-nova-cyan">{timeLeft}s</span>
           </p>
         ) : (
           <p className="text-xs font-semibold text-red-400">
-            ⚠️ Verification code expired. Please request a new code.
+            ⚠️ OTP expired. Please request a new OTP.
           </p>
         )}
       </div>
