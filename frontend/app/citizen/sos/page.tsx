@@ -27,6 +27,7 @@ import {
   findNearestResponders,
 } from '@/lib/emergency-routing';
 import { incidentsApi } from '@/lib/api/client';
+import { validatePhone, isSriLankanPhone } from '@/lib/auth';
 import dynamic from 'next/dynamic';
 
 const LazyCameraModal = dynamic(() => import('@/components/sos/LazyCameraModal'), { ssr: false });
@@ -109,7 +110,13 @@ export default function SOSPage() {
   // Multi-agency routing
   const recommendedAgencies: AgencyType[] = EMERGENCY_ROUTING_RULES[selectedType] || EMERGENCY_ROUTING_RULES.unknown;
 
+  const phoneError = validatePhone(reporterPhone);
+
   const handleStepToAIPreview = () => {
+    if (reporterPhone.trim() && phoneError) {
+      toast.error('Invalid Phone Number', { description: phoneError });
+      return;
+    }
     if (!description.trim() && !audio.audioBlob && !camera.photoBlob) {
       toast.warning('Please provide an emergency description or audio/photo evidence.');
     }
@@ -672,14 +679,32 @@ export default function SOSPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-nova-text-muted block mb-1">Contact Phone</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-nova-text-muted">Contact Phone</label>
+                      {reporterPhone.trim() && (
+                        <span className={cn(
+                          'text-[10px] font-medium font-mono px-1.5 py-0.2 rounded',
+                          phoneError ? 'text-red-400 bg-red-500/10' : 'text-green-400 bg-green-500/10'
+                        )}>
+                          {phoneError ? 'Invalid' : isSriLankanPhone(reporterPhone) ? '✓ Sri Lanka (+94)' : '✓ Valid'}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="tel"
                       value={reporterPhone}
                       onChange={(e) => setReporterPhone(e.target.value)}
                       placeholder="+94 77 123 4567"
-                      className="w-full bg-nova-surface border border-nova-border rounded-xl px-3.5 py-2 text-sm text-nova-text placeholder:text-nova-text-muted focus:outline-none focus:border-nova-cyan/50"
+                      className={cn(
+                        "w-full bg-nova-surface border rounded-xl px-3.5 py-2 text-sm text-nova-text placeholder:text-nova-text-muted focus:outline-none transition-colors",
+                        reporterPhone.trim() && phoneError ? "border-red-500/60 focus:border-red-500" : "border-nova-border focus:border-nova-cyan/50"
+                      )}
                     />
+                    {reporterPhone.trim() && phoneError && (
+                      <p className="text-[11px] text-red-400 mt-1 flex items-center gap-1">
+                        <XCircle className="w-3 h-3 flex-shrink-0" /> {phoneError}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

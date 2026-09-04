@@ -12,6 +12,7 @@ import { AlertTriangle, ClipboardList, ShieldAlert, Send, Clock, CheckCircle2, C
 import { cn, formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
+import { validatePhone, isSriLankanPhone } from '@/lib/auth';
 
 export default function CitizenOperationsCatchAll() {
   const params = useParams<{ slug: string[] }>();
@@ -42,23 +43,43 @@ export default function CitizenOperationsCatchAll() {
       return;
     }
 
+    const phoneErr = validatePhone(phone);
+    if (phone.trim() && phoneErr) {
+      toast.error('Invalid Contact Phone', { description: phoneErr });
+      return;
+    }
+
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1000));
 
     const newId = `NOV-${1000 + incidents.length + 1}`;
-    addIncident({
+    const newInc = {
       id: newId,
+      trackingCode: newId,
       title,
       description,
       type: type as any,
-      severity: 'medium',
-      status: 'reported',
+      severity: 'high' as const,
+      status: 'reported' as const,
       location: { lat: 6.9271, lng: 79.8612, address, district: 'Colombo' },
       reportedAt: new Date().toISOString(),
-      reporterName: 'Amal Perera',
-      reporterPhone: phone || '+94771234567',
+      reporterName: currentUser?.name || 'Amal Perera',
+      reporterPhone: phone.trim() || '+94771234567',
       peopleAffected: 1,
-      updates: [{ id: `upd-${Date.now()}`, status: 'reported', message: 'Citizen report filed via portal.', updatedBy: 'Amal Perera', updatedAt: new Date().toISOString() }],
+      updates: [{ id: `upd-${Date.now()}`, status: 'reported' as const, message: 'Citizen report filed via portal.', updatedBy: currentUser?.name || 'Citizen', updatedAt: new Date().toISOString() }],
+    };
+
+    addIncident(newInc as any);
+    useNovaStore.getState().addNotification({
+      id: `notif-${Date.now()}`,
+      type: 'critical_incident',
+      title: `🚨 ${title}`,
+      message: `${description.slice(0, 70)} — Contact: ${phone.trim() || 'Logged'}`,
+      severity: 'high',
+      read: false,
+      createdAt: new Date().toISOString(),
+      relatedId: newId,
+      relatedType: 'incident',
     });
 
     setSubmitting(false);
@@ -139,14 +160,32 @@ export default function CitizenOperationsCatchAll() {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-nova-text-muted uppercase tracking-wider mb-1.5">Contact Phone</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-nova-text-muted uppercase tracking-wider">Contact Phone</label>
+              {phone.trim() && (
+                <span className={cn(
+                  'text-[10px] font-medium font-mono px-1.5 py-0.2 rounded',
+                  validatePhone(phone) ? 'text-red-400 bg-red-500/10' : 'text-green-400 bg-green-500/10'
+                )}>
+                  {validatePhone(phone) ? 'Invalid' : isSriLankanPhone(phone) ? '✓ Sri Lanka (+94)' : '✓ Valid'}
+                </span>
+              )}
+            </div>
             <input
               type="tel"
-              placeholder="+94771234567"
+              placeholder="+94 77 123 4567"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full bg-nova-surface border border-nova-border rounded-xl px-3 py-2.5 text-sm text-nova-text placeholder:text-nova-text-muted focus:outline-none focus:border-nova-cyan/40"
+              className={cn(
+                "w-full bg-nova-surface border rounded-xl px-3 py-2.5 text-sm text-nova-text placeholder:text-nova-text-muted focus:outline-none transition-colors",
+                phone.trim() && validatePhone(phone) ? "border-red-500/60 focus:border-red-500" : "border-nova-border focus:border-nova-cyan/40"
+              )}
             />
+            {phone.trim() && validatePhone(phone) && (
+              <p className="text-[11px] text-red-400 mt-1">
+                {validatePhone(phone)}
+              </p>
+            )}
           </div>
           <button
             type="submit"

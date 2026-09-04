@@ -431,7 +431,15 @@ export const useNovaStore = create<AppState>()(
           : '';
         const incidents = await apiFetch<Incident[]>(`/incidents${query}`);
         if (Array.isArray(incidents)) {
-          set({ incidents });
+          // Merge with local state to avoid wiping out freshly dispatched reports
+          set((state) => {
+            const backendIds = new Set(incidents.map((i) => i.id));
+            const backendCodes = new Set(incidents.map((i) => i.trackingCode).filter(Boolean));
+            const localOnly = state.incidents.filter(
+              (i) => !backendIds.has(i.id) && (!i.trackingCode || !backendCodes.has(i.trackingCode))
+            );
+            return { incidents: [...localOnly, ...incidents] };
+          });
         }
       } catch (err) {
         console.warn('Backend incidents API error:', err);
@@ -448,6 +456,24 @@ export const useNovaStore = create<AppState>()(
           (i) => i.id !== incident.id && (!incident.trackingCode || i.trackingCode !== incident.trackingCode)
         );
         const updated = [incident, ...filtered];
+
+        // Link incident to rescue team if assigned
+        let updatedTeams = state.rescueTeams;
+        const effectiveTeamId = incident.assignedTeamId || incident.assignedTeam;
+        if (effectiveTeamId) {
+          updatedTeams = state.rescueTeams.map((t) => {
+            if (t.id === effectiveTeamId) {
+              return {
+                ...t,
+                status: (t.status === 'available' ? 'assigned' : t.status) as any,
+                currentIncident: incident.id,
+                lastUpdated: new Date().toISOString(),
+              };
+            }
+            return t;
+          });
+        }
+
         // Broadcast to other open browser tabs
         if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           try {
@@ -456,7 +482,7 @@ export const useNovaStore = create<AppState>()(
             bc.close();
           } catch { }
         }
-        return { incidents: updated };
+        return { incidents: updated, rescueTeams: updatedTeams };
       }),
     updateIncident: (id, updates) =>
       set((state) => {

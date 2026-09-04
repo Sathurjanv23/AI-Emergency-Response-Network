@@ -74,47 +74,49 @@ export function AuthGuard({ children, allowedRoles, redirectTo = '/login', allow
       return;
     }
 
-    // 4. Guest Commander bypass for Launch Command Center (only when not logged in)
-    if (allowGuestCommander && !user) {
-      const commanderSession = {
-        id: 'officer-demo',
-        name: 'Officer Ranasinghe (Command Center)',
-        email: 'officer@nova.lk',
-        role: 'officer' as UserRole,
-        status: 'ACTIVE' as const,
-        approvalStatus: 'APPROVED' as const,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
-        isActive: true,
-        isVerified: true,
-        language: 'en' as const,
-      };
-      login(commanderSession);
-      setStatus('authorized');
+    // 4. Guest / Cross-Portal Commander bypass for Command Center
+    if (allowGuestCommander) {
+      if (!user) {
+        const commanderSession = {
+          id: 'officer-demo',
+          name: 'Officer Ranasinghe (Command Center)',
+          email: 'officer@nova.lk',
+          role: 'officer' as UserRole,
+          status: 'ACTIVE' as const,
+          approvalStatus: 'APPROVED' as const,
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+          isActive: true,
+          isVerified: true,
+          language: 'en' as const,
+        };
+        login(commanderSession);
 
-      if (!getToken()) {
-        signIn('officer@nova.lk', 'Demo1234')
-          .then((res) => {
-            if (res.success) {
-              login({
-                id: res.user.id,
-                name: res.user.name,
-                email: res.user.email,
-                role: res.user.role,
-                status: res.user.status,
-                approvalStatus: res.user.approvalStatus,
-                rescueTeamId: res.user.rescueTeamId,
-                language: res.user.language || 'en',
-                createdAt: res.user.createdAt,
-                lastActive: res.user.lastActive,
-                isActive: res.user.isActive,
-                isVerified: res.user.isVerified,
-              });
-              useNovaStore.getState().fetchAllData();
-            }
-          })
-          .catch(() => {});
+        if (!getToken()) {
+          signIn('officer@nova.lk', 'Demo1234')
+            .then((res) => {
+              if (res.success) {
+                login({
+                  id: res.user.id,
+                  name: res.user.name,
+                  email: res.user.email,
+                  role: res.user.role,
+                  status: res.user.status,
+                  approvalStatus: res.user.approvalStatus,
+                  rescueTeamId: res.user.rescueTeamId,
+                  language: res.user.language || 'en',
+                  createdAt: res.user.createdAt,
+                  lastActive: res.user.lastActive,
+                  isActive: res.user.isActive,
+                  isVerified: res.user.isVerified,
+                });
+                useNovaStore.getState().fetchAllData();
+              }
+            })
+            .catch(() => {});
+        }
       }
+      setStatus('authorized');
       return;
     }
 
