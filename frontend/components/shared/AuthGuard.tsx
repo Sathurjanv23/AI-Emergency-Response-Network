@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useNovaStore } from '@/lib/store/nova-store';
-import { getSession } from '@/lib/auth';
+import { getSession, signIn, getToken } from '@/lib/auth';
 import type { UserRole } from '@/types';
 import { Loader2 } from 'lucide-react';
+
+import { CitizenSignInPrompt } from '@/components/citizen/CitizenSignInPrompt';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -13,6 +15,8 @@ interface AuthGuardProps {
   allowedRoles?: UserRole[];
   /** Where to redirect unauthenticated users */
   redirectTo?: string;
+  /** Allow launching command center without redirecting to login */
+  allowGuestCommander?: boolean;
 }
 
 const ROLE_HREF: Record<UserRole, string> = {
@@ -26,13 +30,16 @@ const ROLE_HREF: Record<UserRole, string> = {
 /**
  * AuthGuard — Protects dashboard pages.
  * - Checks localStorage session on mount
- * - Rejects unverified users (redirects to /login)
+ * - Rejects unverified users (redirects to /login or shows sign-in prompt)
  * - Enforces role-based access (redirects wrong roles to their own portal)
+ * - For Citizen portal: Displays a dedicated CitizenSignInPrompt informing users
+ *   that full citizen access requires sign-in, while allowing direct emergency reporting.
+ * - For Command Center: Allows launching command center directly if allowGuestCommander is enabled.
  */
-export function AuthGuard({ children, allowedRoles, redirectTo = '/login' }: AuthGuardProps) {
+export function AuthGuard({ children, allowedRoles, redirectTo = '/login', allowGuestCommander }: AuthGuardProps) {
   const router = useRouter();
   const { isAuthenticated, currentUser, login } = useNovaStore();
-  const [status, setStatus] = useState<'checking' | 'authorized' | 'unauthorized'>('checking');
+  const [status, setStatus] = useState<'checking' | 'authorized' | 'unauthorized' | 'need_citizen_signin'>('checking');
 
   useEffect(() => {
     // 1. Prefer in-memory session (already verified by AuthProvider)
@@ -61,14 +68,70 @@ export function AuthGuard({ children, allowedRoles, redirectTo = '/login' }: Aut
       }
     }
 
-    // 3. No session → redirect to login
+    // 3. If user exists and has an allowed role, authorize immediately (do NOT overwrite)
+    if (user && (!allowedRoles || allowedRoles.includes(user.role))) {
+      setStatus('authorized');
+      return;
+    }
+
+    // 4. Guest Commander bypass for Launch Command Center (only when not logged in)
+    if (allowGuestCommander && !user) {
+      const commanderSession = {
+        id: 'officer-demo',
+        name: 'Officer Ranasinghe (Command Center)',
+        email: 'officer@nova.lk',
+        role: 'officer' as UserRole,
+        status: 'ACTIVE' as const,
+        approvalStatus: 'APPROVED' as const,
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        isActive: true,
+        isVerified: true,
+        language: 'en' as const,
+      };
+      login(commanderSession);
+      setStatus('authorized');
+
+      if (!getToken()) {
+        signIn('officer@nova.lk', 'Demo1234')
+          .then((res) => {
+            if (res.success) {
+              login({
+                id: res.user.id,
+                name: res.user.name,
+                email: res.user.email,
+                role: res.user.role,
+                status: res.user.status,
+                approvalStatus: res.user.approvalStatus,
+                rescueTeamId: res.user.rescueTeamId,
+                language: res.user.language || 'en',
+                createdAt: res.user.createdAt,
+                lastActive: res.user.lastActive,
+                isActive: res.user.isActive,
+                isVerified: res.user.isVerified,
+              });
+              useNovaStore.getState().fetchAllData();
+            }
+          })
+          .catch(() => {});
+      }
+      return;
+    }
+
+    // 5. Citizen Portal access control
+    if (allowedRoles && allowedRoles.includes('citizen') && (!user || user.role !== 'citizen')) {
+      setStatus('need_citizen_signin');
+      return;
+    }
+
+    // 5. No session → redirect to login
     if (!user) {
       router.replace(redirectTo);
       setStatus('unauthorized');
       return;
     }
 
-    // 4. Role check
+    // 6. Role check
     if (allowedRoles && !allowedRoles.includes(user.role)) {
       router.replace(ROLE_HREF[user.role]);
       setStatus('unauthorized');
@@ -88,6 +151,10 @@ export function AuthGuard({ children, allowedRoles, redirectTo = '/login' }: Aut
         </div>
       </div>
     );
+  }
+
+  if (status === 'need_citizen_signin') {
+    return <CitizenSignInPrompt feature="dashboard" />;
   }
 
   if (status === 'unauthorized') {

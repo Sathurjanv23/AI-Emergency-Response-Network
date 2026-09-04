@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useNovaStore } from '@/lib/store/nova-store';
-import { signOut } from '@/lib/auth';
+import { signOut, getSession } from '@/lib/auth';
 import { cn } from '@/lib/utils';
-import { Bell, Search, ChevronDown, Zap, AlertTriangle, Play, Square, Globe, LogOut } from 'lucide-react';
+import { Bell, Search, ChevronDown, ChevronLeft, Zap, AlertTriangle, Play, Square, Globe, LogOut } from 'lucide-react';
 import type { UserRole } from '@/types';
 import { useTranslation } from '@/lib/i18n';
 
@@ -45,7 +45,15 @@ export function NovaLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 export function AlertTicker() {
   const { localize, t } = useTranslation();
   const { alerts, loading, errors } = useNovaStore();
-  const activeAlerts = alerts.map((alert) => `${alert.title || alert.type}: ${alert.message}`);
+  const activeAlerts = alerts.map((alert) => {
+    let title = alert.title;
+    if (!title || title.trim() === '' || title.toLowerCase() === 'notification') {
+      if (alert.severity === 'critical') title = '🔴 CRITICAL EMERGENCY';
+      else if (alert.severity === 'high') title = '🟠 HIGH PRIORITY';
+      else title = '⚠️ EMERGENCY ALERT';
+    }
+    return `${title}: ${alert.message}`;
+  });
 
   const displayList = activeAlerts.length > 0
     ? activeAlerts
@@ -108,7 +116,7 @@ function NotificationBell() {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
           >
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </motion.span>
         )}
       </button>
@@ -285,15 +293,26 @@ interface TopNavProps {
 export function TopNav({ role, showTicker = true }: TopNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { language, setLanguage, currentUser, logout } = useNovaStore();
+  const { language, setLanguage, currentUser, isAuthenticated, logout } = useNovaStore();
   const [searchOpen, setSearchOpen] = useState(false);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const { t } = useTranslation();
 
-  // Compute avatar initials from the current user's name
-  const avatarInitials = currentUser?.name
-    ? currentUser.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Determine if the user is a hospital coordinator or rescue team member visiting command center
+  const effectiveUser = currentUser || (mounted ? getSession() : null);
+  const effectiveName = effectiveUser?.name;
+  const avatarInitials = effectiveName
+    ? effectiveName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : 'DP';
+
+  const userOriginalRole = effectiveUser?.role;
+  const isVisitingFromOtherPortal = Boolean(userOriginalRole && ['hospital', 'rescue_team'].includes(userOriginalRole));
+  const isCommandSection = Boolean(role === 'officer' || pathname?.startsWith('/command'));
 
   const handleSignOut = () => {
     signOut();
@@ -337,6 +356,30 @@ export function TopNav({ role, showTicker = true }: TopNavProps) {
 
           {/* Right Controls */}
           <div className="flex items-center gap-2">
+            {/* Go to Command Center button (shown outside Command Center) */}
+            {mounted && !isCommandSection && (
+              <Link
+                href="/command"
+                className="flex items-center gap-1.5 text-xs font-semibold bg-nova-cyan/10 text-nova-cyan border border-nova-cyan/30 rounded-lg px-2.5 py-1.5 hover:bg-nova-cyan/20 transition-all mr-1"
+                title="Go to Command Center"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Command Center</span>
+              </Link>
+            )}
+
+            {/* Back button (shown inside Command Center when user belongs to Hospital or Rescue) */}
+            {mounted && isCommandSection && isVisitingFromOtherPortal && (
+              <Link
+                href={ROLE_LINKS[userOriginalRole as UserRole]}
+                className="flex items-center gap-1.5 text-xs font-semibold bg-nova-cyan/15 text-nova-cyan border border-nova-cyan/40 rounded-lg px-3 py-1.5 hover:bg-nova-cyan/25 transition-all mr-1 shadow-sm"
+                title={`Return to ${TRANSLATED_ROLES[userOriginalRole as UserRole]}`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back to {TRANSLATED_ROLES[userOriginalRole as UserRole]}</span>
+              </Link>
+            )}
+
             {/* Language Switcher */}
             <div className="flex items-center gap-0.5 bg-nova-surface border border-nova-border rounded-lg p-0.5">
               {LANG_OPTIONS.map((opt) => (
@@ -406,26 +449,45 @@ export function TopNav({ role, showTicker = true }: TopNavProps) {
                       >
                         🚪 {t('btn.home')}
                       </Link>
-                      <button
-                        onClick={handleSignOut}
-                        className="flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                      >
-                        <LogOut className="w-3.5 h-3.5" /> {t('btn.sign_out')}
-                      </button>
+                      {currentUser && isAuthenticated ? (
+                        <button
+                          onClick={handleSignOut}
+                          className="flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                        >
+                          <LogOut className="w-3.5 h-3.5" /> {t('btn.sign_out')}
+                        </button>
+                      ) : (
+                        <Link
+                          href="/login"
+                          onClick={() => setRoleMenuOpen(false)}
+                          className="flex items-center gap-2 w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-nova-cyan hover:bg-nova-surface2 transition-colors"
+                        >
+                          🔑 Sign In
+                        </Link>
+                      )}
                     </motion.div>
                   </>
                 )}
               </AnimatePresence>
             </div>
 
-            {/* Profile avatar */}
-            <div
-              title={currentUser?.name ?? 'Profile'}
-              className="w-8 h-8 rounded-full bg-gradient-to-br from-nova-cyan to-nova-blue flex items-center justify-center text-nova-bg text-xs font-bold cursor-pointer hover:scale-105 transition-transform flex-shrink-0"
-              onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-            >
-              {avatarInitials}
-            </div>
+            {/* Profile avatar or Sign In button */}
+            {currentUser && isAuthenticated ? (
+              <div
+                title={currentUser?.name ?? 'Profile'}
+                className="w-8 h-8 rounded-full bg-gradient-to-br from-nova-cyan to-nova-blue flex items-center justify-center text-nova-bg text-xs font-bold cursor-pointer hover:scale-105 transition-transform flex-shrink-0"
+                onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+              >
+                {avatarInitials}
+              </div>
+            ) : (
+              <Link
+                href="/login?portal=citizen"
+                className="text-xs font-bold bg-nova-cyan text-nova-bg px-3.5 py-1.5 rounded-lg hover:bg-nova-cyan-dim transition-all whitespace-nowrap shadow-sm ml-1"
+              >
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
       </div>

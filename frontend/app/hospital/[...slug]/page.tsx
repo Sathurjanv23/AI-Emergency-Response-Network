@@ -21,8 +21,8 @@ export default function HospitalOperationsCatchAll() {
   const { hospitals, updateHospital, currentUser } = useNovaStore();
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>('');
 
-  const userHospital = hospitals.find((h) => h.id === currentUser?.hospitalId) ||
-                       hospitals.find((h) => currentUser?.district && h.district.toLowerCase() === currentUser.district.toLowerCase()) ||
+  const userHospital = hospitals.find((h) => h.id === (currentUser as any)?.hospitalId) ||
+                       hospitals.find((h) => currentUser?.district && h.district?.toLowerCase() === currentUser.district.toLowerCase()) ||
                        hospitals[0];
 
   const activeHospitalId = selectedHospitalId || userHospital?.id || 'h001';

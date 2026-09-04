@@ -32,17 +32,16 @@ public enum IncidentStatus {
 
     // State machine transition table
     private static final Map<IncidentStatus, Set<IncidentStatus>> ALLOWED_TRANSITIONS = Map.of(
-        REPORTED, EnumSet.of(REPORTED, AI_ANALYZED, PRIORITIZED, DISPATCHED, ACKNOWLEDGED, CANCELLED),
-        AI_ANALYZED, EnumSet.of(AI_ANALYZED, PRIORITIZED, DISPATCHED, ACKNOWLEDGED, CANCELLED),
-        PRIORITIZED, EnumSet.of(PRIORITIZED, DISPATCHED, ACKNOWLEDGED, CANCELLED),
-        DISPATCHED, EnumSet.of(DISPATCHED, ACKNOWLEDGED, EN_ROUTE, CANCELLED),
-        ACKNOWLEDGED, EnumSet.of(ACKNOWLEDGED, EN_ROUTE, ON_SCENE, CANCELLED),
-        EN_ROUTE, EnumSet.of(EN_ROUTE, ON_SCENE, TRANSPORTING, CANCELLED),
-        ON_SCENE, EnumSet.of(ON_SCENE, TRANSPORTING, RESOLVED, CANCELLED),
-        TRANSPORTING, EnumSet.of(TRANSPORTING, RESOLVED, CANCELLED),
-        RESOLVED, EnumSet.of(RESOLVED),
-        CANCELLED, EnumSet.of(CANCELLED)
-    );
+            REPORTED, EnumSet.of(REPORTED, AI_ANALYZED, PRIORITIZED, DISPATCHED, ACKNOWLEDGED, CANCELLED),
+            AI_ANALYZED, EnumSet.of(AI_ANALYZED, PRIORITIZED, DISPATCHED, ACKNOWLEDGED, CANCELLED),
+            PRIORITIZED, EnumSet.of(PRIORITIZED, DISPATCHED, ACKNOWLEDGED, CANCELLED),
+            DISPATCHED, EnumSet.of(DISPATCHED, ACKNOWLEDGED, EN_ROUTE, CANCELLED),
+            ACKNOWLEDGED, EnumSet.of(ACKNOWLEDGED, EN_ROUTE, ON_SCENE, CANCELLED),
+            EN_ROUTE, EnumSet.of(EN_ROUTE, ON_SCENE, TRANSPORTING, CANCELLED),
+            ON_SCENE, EnumSet.of(ON_SCENE, TRANSPORTING, RESOLVED, CANCELLED),
+            TRANSPORTING, EnumSet.of(TRANSPORTING, RESOLVED, CANCELLED),
+            RESOLVED, EnumSet.of(RESOLVED),
+            CANCELLED, EnumSet.of(CANCELLED));
 
     public static IncidentStatus fromString(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -61,14 +60,18 @@ public enum IncidentStatus {
             case "transporting", "transport" -> TRANSPORTING;
             case "resolved", "closed", "completed" -> RESOLVED;
             case "cancelled", "canceled" -> CANCELLED;
-            default -> throw new InvalidStatusException("Invalid incident status: '" + raw + "'. Allowed values: reported, ai_analyzed, prioritized, dispatched, acknowledged, en_route, on_scene, transporting, resolved, cancelled.");
+            default -> throw new InvalidStatusException("Invalid incident status: '" + raw
+                    + "'. Allowed values: reported, ai_analyzed, prioritized, dispatched, acknowledged, en_route, on_scene, transporting, resolved, cancelled.");
         };
     }
 
     public static boolean isValidTransition(IncidentStatus from, IncidentStatus to) {
-        if (from == null || to == null) return false;
-        if (from == to) return true; // Idempotent
-        if (to == CANCELLED && from != RESOLVED) return true;
+        if (from == null || to == null)
+            return false;
+        if (from == to)
+            return true; // Idempotent
+        if (to == CANCELLED && from != RESOLVED)
+            return true;
         Set<IncidentStatus> allowed = ALLOWED_TRANSITIONS.get(from);
         return allowed != null && allowed.contains(to);
     }

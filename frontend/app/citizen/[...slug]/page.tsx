@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { useNovaStore } from '@/lib/store/nova-store';
+import { CitizenSignInPrompt } from '@/components/citizen/CitizenSignInPrompt';
 import { motion } from 'framer-motion';
-import { AlertTriangle, ClipboardList, ShieldAlert, Send, Clock, CheckCircle2, ChevronRight, Phone } from 'lucide-react';
+import { AlertTriangle, ClipboardList, ShieldAlert, Send, Clock, CheckCircle2, ChevronRight, Phone, ShieldCheck } from 'lucide-react';
 import { cn, formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
@@ -17,8 +19,13 @@ export default function CitizenOperationsCatchAll() {
   const slug = params?.slug?.[0] || '';
   const { t } = useTranslation();
 
-  const { incidents, addIncident } = useNovaStore();
+  const { incidents, addIncident, currentUser } = useNovaStore();
   const citizenReports = incidents.filter(i => i.reporterName === 'Amal Perera');
+
+  // If attempting to access My Reports without citizen login, require sign-in
+  if (slug === 'reports' && (!currentUser || currentUser.role !== 'citizen')) {
+    return <CitizenSignInPrompt feature="reports" />;
+  }
 
   // Form State for Report Emergency
   const [title, setTitle] = useState('');
@@ -63,6 +70,20 @@ export default function CitizenOperationsCatchAll() {
   const renderReportForm = () => {
     return (
       <div className="space-y-4 max-w-xl mx-auto">
+        {(!currentUser || currentUser.role !== 'citizen') && (
+          <div className="p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/30 text-xs flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-orange-300 block">Direct Emergency Filing Mode</span>
+              <p className="text-nova-text-dim text-[11px] mt-0.5 leading-relaxed">
+                Emergency reporting is open to all citizens without signing in. To access the full Citizen Portal (view dashboard, track report progress, and receive live updates), please{' '}
+                <Link href="/login?portal=citizen" className="text-nova-cyan underline font-semibold">
+                  sign in to Citizen Portal
+                </Link>.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle className="w-6 h-6 text-red-400" />
           <h2 className="text-lg font-bold text-nova-text">{t('heading.distress_form')}</h2>

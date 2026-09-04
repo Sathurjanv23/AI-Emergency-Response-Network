@@ -166,7 +166,8 @@ interface SidebarProps {
 export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useTranslation();
-  const { incidents, notifications, unreadCount, rescueTeams } = useNovaStore();
+  const { incidents, notifications, unreadCount, rescueTeams, currentUser, isAuthenticated } = useNovaStore();
+  const isCitizenGuest = role === 'citizen' && (!isAuthenticated || currentUser?.role !== 'citizen');
 
   const badges: BadgeCounts = useMemo(() => {
     const officerIncidents = incidents.filter(
@@ -199,6 +200,19 @@ export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
   }, [incidents, notifications, unreadCount, rescueTeams]);
 
   const rawSections = getNavSections(role, badges);
+
+  // If guest viewing citizen routes, annotate locked vs open items
+  if (isCitizenGuest && rawSections[0]?.items) {
+    rawSections[0].items = rawSections[0].items.map((it) => {
+      if (it.href === '/citizen' || it.href === '/citizen/reports') {
+        return { ...it, badge: '🔒 Sign In', badgeVariant: 'warning' as const };
+      }
+      if (it.href === '/citizen/sos') {
+        return { ...it, badge: 'OPEN', badgeVariant: 'critical' as const };
+      }
+      return it;
+    });
+  }
 
   const getTranslationKey = (label: string) => {
     const map: Record<string, string> = {
@@ -270,6 +284,9 @@ export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
     admin: 'ADMIN',
   };
 
+  const userOriginalRole = currentUser?.role;
+  const isVisitingCommand = role === 'officer' && Boolean(userOriginalRole && ['hospital', 'rescue_team'].includes(userOriginalRole));
+
   return (
     <motion.aside
       className={cn(
@@ -279,10 +296,28 @@ export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
     >
       {/* Role Badge */}
       {!collapsed && (
-        <div className="px-4 py-3 border-b border-nova-border">
-          <span className={cn('text-[10px] font-bold px-2 py-1 rounded border', roleColors[role])}>
-            {roleLabels[role]} PORTAL
+        <div className="px-4 py-3 border-b border-nova-border flex items-center justify-between">
+          <span className={cn('text-[10px] font-bold px-2 py-1 rounded border', isCitizenGuest ? 'text-orange-400 border-orange-500/30 bg-orange-500/10' : roleColors[role])}>
+            {isCitizenGuest ? 'GUEST REPORTING' : `${roleLabels[role]} PORTAL`}
           </span>
+          {isCitizenGuest && (
+            <Link href="/login?portal=citizen" className="text-[10px] text-nova-cyan hover:underline font-bold">
+              Sign In →
+            </Link>
+          )}
+        </div>
+      )}
+
+      {/* Return to original portal banner */}
+      {!collapsed && isVisitingCommand && (
+        <div className="px-3 py-2 bg-nova-cyan/10 border-b border-nova-cyan/25 flex items-center justify-between">
+          <Link
+            href={userOriginalRole === 'hospital' ? '/hospital' : '/rescue'}
+            className="flex items-center gap-1 text-[11px] font-semibold text-nova-cyan hover:underline"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Back to {userOriginalRole === 'hospital' ? 'Hospital' : 'Rescue'}</span>
+          </Link>
         </div>
       )}
 
