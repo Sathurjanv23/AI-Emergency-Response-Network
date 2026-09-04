@@ -25,11 +25,15 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
     private final UserDetailsServiceImpl userDetailsService;
+
+    public SecurityConfig(JwtFilter jwtFilter, UserDetailsServiceImpl userDetailsService) {
+        this.jwtFilter = jwtFilter;
+        this.userDetailsService = userDetailsService;
+    }
 
     @Value("${nova.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
@@ -42,25 +46,52 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // Public authentication endpoints
+                .requestMatchers("/api/auth/me").authenticated()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/auth/oauth2/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
+                // Public citizen emergency report submission (no auth required for anonymous SOS)
+                .requestMatchers(HttpMethod.POST, "/api/incidents/report", "/api/incidents").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/incidents/media/**").permitAll()
                 // Admin endpoints strictly require ROLE_ADMIN
                 .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
-                // Public read-only operational emergency endpoints for dashboard and live map
+                // Rescue-team-specific action endpoints
+                .requestMatchers(HttpMethod.POST, "/api/incidents/*/accept").hasAnyAuthority("ROLE_RESCUE_TEAM", "ROLE_OFFICER", "ROLE_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/incidents/*/status").hasAnyAuthority("ROLE_RESCUE_TEAM", "ROLE_OFFICER", "ROLE_ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/incidents/*/status").hasAnyAuthority("ROLE_RESCUE_TEAM", "ROLE_OFFICER", "ROLE_ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/rescue-teams/*/status").hasAnyAuthority("ROLE_RESCUE_TEAM", "ROLE_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/rescue-teams/assign").hasAnyAuthority("ROLE_OFFICER", "ROLE_ADMIN")
+                // Citizens + all authenticated roles can READ incidents and alerts
+                // (citizens need this to track their own emergency status)
+                .requestMatchers(HttpMethod.GET, "/api/incidents/**").hasAnyAuthority(
+                    "ROLE_CITIZEN", "ROLE_OFFICER", "ROLE_ADMIN", "ROLE_RESCUE_TEAM", "ROLE_HOSPITAL")
+                .requestMatchers(HttpMethod.GET, "/api/alerts/**").hasAnyAuthority(
+                    "ROLE_CITIZEN", "ROLE_OFFICER", "ROLE_ADMIN", "ROLE_RESCUE_TEAM", "ROLE_HOSPITAL")
+                // Other incident mutations require authenticated operational roles
+                .requestMatchers("/api/incidents/**").hasAnyAuthority(
+                    "ROLE_CITIZEN", "ROLE_OFFICER", "ROLE_ADMIN", "ROLE_RESCUE_TEAM", "ROLE_HOSPITAL")
+                // Operational endpoints restricted to response/command roles only (not citizens)
                 .requestMatchers(HttpMethod.GET,
-                    "/api/incidents/**",
                     "/api/rescue-teams/**",
                     "/api/hospitals/**",
                     "/api/resources/**",
-                    "/api/predictions/**",
-                    "/api/notifications/**",
-                    "/api/alerts/**",
-                    "/api/events/**",
                     "/api/analytics/**"
-                ).permitAll()
-                // All mutation and other operations require valid authenticated JWT
+                ).hasAnyAuthority("ROLE_OFFICER", "ROLE_ADMIN", "ROLE_RESCUE_TEAM", "ROLE_HOSPITAL")
+                .requestMatchers(HttpMethod.GET, "/api/predictions/**", "/api/notifications/**", "/api/events/**").authenticated()
+                // All other operations require valid authenticated JWT
                 .anyRequest().authenticated()
+            )
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType(org.springframework.http.MediaType.APPLICATION_JSON_VALUE);
+                    response.getWriter().write("{\"success\":false,\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required. Please log in.\"}");
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType(org.springframework.http.MediaType.APPLICATION_JSON_VALUE);
+                    response.getWriter().write("{\"success\":false,\"code\":\"FORBIDDEN\",\"message\":\"Access denied. Insufficient privileges.\"}");
+                })
             )
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

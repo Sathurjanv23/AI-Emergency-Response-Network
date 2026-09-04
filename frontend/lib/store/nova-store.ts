@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type {
   Incident, RescueTeam, Hospital, Resource, RiskPrediction,
-  Notification, SimulationState, User, UserRole, Language
+  Notification, OperationalAlert, SimulationState, User, UserRole, Language
 } from '@/types';
 import { getToken } from '@/lib/auth';
 
@@ -13,25 +13,69 @@ import { getToken } from '@/lib/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  data?: unknown;
+
+  constructor(message: string, status: number, code?: string, data?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
+}
+
 async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-    ...options,
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: 'API error' }));
-    throw new Error(err.message || `Error ${res.status}`);
+  const headers = new Headers(options?.headers);
+  if (!headers.has('Content-Type') && !(options?.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const json = await res.json();
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 204) {
+    return null as unknown as T;
+  }
+
+  if (!res.ok) {
+    let errMsg = `Error ${res.status}`;
+    let errCode = `HTTP_${res.status}`;
+    let errData: any = null;
+
+    try {
+      const text = await res.text();
+      if (text) {
+        try {
+          const json = JSON.parse(text);
+          errMsg = json.message || json.error || errMsg;
+          errCode = json.code || errCode;
+          errData = json.data ?? json;
+        } catch {
+          errMsg = text;
+        }
+      }
+    } catch {}
+
+    throw new ApiError(errMsg, res.status, errCode, errData);
+  }
+
+  const text = await res.text();
+  if (!text) {
+    return null as unknown as T;
+  }
+
+  const json = JSON.parse(text);
   // Backend wraps in { data, success, ... }
-  return json.data ?? json;
+  return json.data !== undefined ? json.data : json;
 }
 
 // ─── App State ──────────────────────────────────────────────
@@ -55,6 +99,14 @@ interface AppState {
     resources: boolean;
     predictions: boolean;
     notifications: boolean;
+    alerts: boolean;
+  };
+  errors: {
+    incidents: string | null;
+    teams: string | null;
+    resources: string | null;
+    hospitals: string | null;
+    alerts: string | null;
   };
 
   // Incidents
@@ -62,6 +114,8 @@ interface AppState {
   fetchIncidents: (params?: { severity?: string; status?: string }) => Promise<void>;
   addIncident: (incident: Incident) => void;
   updateIncident: (id: string, updates: Partial<Incident>) => void;
+  acceptMission: (incidentId: string, teamId: string, teamName?: string) => Promise<void>;
+  updateMissionStatus: (incidentId: string, status: string, teamId?: string, notes?: string) => Promise<void>;
 
   // Teams
   rescueTeams: RescueTeam[];
@@ -90,6 +144,8 @@ interface AppState {
   markNotificationRead: (id: string) => void;
   markAllRead: () => void;
   unreadCount: number;
+  alerts: OperationalAlert[];
+  fetchAlerts: () => Promise<void>;
 
   // Initial data fetch (called once on app mount)
   fetchAllData: () => Promise<void>;
@@ -332,6 +388,9 @@ const SIMULATION_STEPS_DATA = [
 
 // ─── Store ───────────────────────────────────────────────────
 
+let fetchAllDataPromise: Promise<void> | null = null;
+const acceptingMissionIds = new Set<string>();
+
 export const useNovaStore = create<AppState>()(
   subscribeWithSelector((set, get) => ({
     // Auth
@@ -352,12 +411,20 @@ export const useNovaStore = create<AppState>()(
       resources: false,
       predictions: false,
       notifications: false,
+      alerts: false,
+    },
+    errors: {
+      incidents: null,
+      teams: null,
+      resources: null,
+      hospitals: null,
+      alerts: null,
     },
 
     // ─── Incidents ──────────────────────────────────────────
     incidents: [],
     fetchIncidents: async (params) => {
-      set(s => ({ loading: { ...s.loading, incidents: true } }));
+      set(s => ({ loading: { ...s.loading, incidents: true }, errors: { ...s.errors, incidents: null } }));
       try {
         const query = params
           ? '?' + new URLSearchParams(params as Record<string, string>).toString()
@@ -368,6 +435,7 @@ export const useNovaStore = create<AppState>()(
         }
       } catch (err) {
         console.warn('Backend incidents API error:', err);
+        set(s => ({ errors: { ...s.errors, incidents: err instanceof Error ? err.message : 'Unable to load incidents.' } }));
       } finally {
         set(s => ({ loading: { ...s.loading, incidents: false } }));
         get().refreshStats();
@@ -375,20 +443,176 @@ export const useNovaStore = create<AppState>()(
     },
     addIncident: (incident) =>
       set((state) => {
-        const updated = [incident, ...state.incidents];
+        // Prevent duplicate incidents by id or trackingCode
+        const filtered = state.incidents.filter(
+          (i) => i.id !== incident.id && (!incident.trackingCode || i.trackingCode !== incident.trackingCode)
+        );
+        const updated = [incident, ...filtered];
+        // Broadcast to other open browser tabs
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('nova-emergency-bus');
+            bc.postMessage({ type: 'incident_created', data: incident });
+            bc.close();
+          } catch {}
+        }
         return { incidents: updated };
       }),
     updateIncident: (id, updates) =>
-      set((state) => ({
-        incidents: state.incidents.map((inc) =>
-          inc.id === id ? { ...inc, ...updates, updatedAt: new Date().toISOString() } : inc
-        ),
-      })),
+      set((state) => {
+        const updated = state.incidents.map((inc) =>
+          inc.id === id || inc.trackingCode === id ? { ...inc, ...updates, updatedAt: new Date().toISOString() } : inc
+        );
+        const updatedInc = updated.find((inc) => inc.id === id || inc.trackingCode === id);
+        // Broadcast to other open browser tabs
+        if (updatedInc && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('nova-emergency-bus');
+            bc.postMessage({ type: 'incident_updated', data: updatedInc });
+            bc.close();
+          } catch {}
+        }
+        return { incidents: updated };
+      }),
+
+    acceptMission: async (incidentId, teamId, teamName) => {
+      if (acceptingMissionIds.has(incidentId)) {
+        throw new ApiError('Mission acceptance is already in progress.', 409, 'REQUEST_IN_PROGRESS');
+      }
+
+      const state = get();
+      const incident = state.incidents.find((item) => item.id === incidentId || item.trackingCode === incidentId);
+      const team = state.rescueTeams.find((item) => item.id === teamId);
+
+      if (incident) {
+        const normalizedStatus = incident.status.toLowerCase();
+        if (['resolved', 'closed', 'cancelled'].includes(normalizedStatus)) {
+          throw new ApiError('This mission is no longer active.', 409, 'INVALID_STATUS_TRANSITION');
+        }
+        const assignedTeamId = incident.assignedTeamId || incident.assignedTeam;
+        if (assignedTeamId && assignedTeamId !== teamId && ['acknowledged', 'en_route', 'on_scene', 'transporting', 'responding'].includes(normalizedStatus)) {
+          throw new ApiError('This mission has already been accepted by another team.', 409, 'INCIDENT_ALREADY_ASSIGNED');
+        }
+      }
+
+      if (team) {
+        if (team.status === 'unavailable') {
+          throw new ApiError(`Rescue team '${team.name}' is currently unavailable.`, 409, 'TEAM_BUSY');
+        }
+        const isCurrentIncident = team.currentIncident === incidentId
+          || team.currentIncident === incident?.id
+          || team.currentIncident === incident?.trackingCode;
+        if (team.currentIncident && !isCurrentIncident && team.status !== 'available') {
+          throw new ApiError(`Rescue team '${team.name}' is already assigned to another mission.`, 409, 'TEAM_BUSY');
+        }
+      }
+
+      acceptingMissionIds.add(incidentId);
+      try {
+        // 1. Send request to backend and await confirmed entity
+        const confirmedIncident = await apiFetch<Incident>(`/incidents/${incidentId}/accept`, {
+          method: 'POST',
+          body: JSON.stringify({ teamId, teamName }),
+        });
+
+        // 2. Update store only upon confirmed backend response
+        set((state) => {
+          const updatedIncidents = state.incidents.map((inc) =>
+            inc.id === confirmedIncident.id || (confirmedIncident.trackingCode && inc.trackingCode === confirmedIncident.trackingCode)
+              ? confirmedIncident
+              : inc
+          );
+
+          const updatedTeams = state.rescueTeams.map((t) => {
+            if (t.id === teamId) {
+              return { ...t, status: 'assigned' as const, currentIncident: confirmedIncident.id, lastUpdated: new Date().toISOString() };
+            }
+            return t;
+          });
+
+          return { incidents: updatedIncidents, rescueTeams: updatedTeams };
+        });
+
+        // 3. Broadcast confirmed update to other tabs
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('nova-emergency-bus');
+            bc.postMessage({
+              type: 'mission_accepted',
+              data: confirmedIncident,
+            });
+            bc.close();
+          } catch {}
+        }
+
+        // 4. Refresh both incidents and teams from server
+        await Promise.allSettled([get().fetchIncidents(), get().fetchTeams()]);
+        get().refreshStats();
+      } catch (err: any) {
+        // Re-throw the original error (preserving ApiError status/code for UI)
+        throw err;
+      } finally {
+        acceptingMissionIds.delete(incidentId);
+      }
+    },
+
+    updateMissionStatus: async (incidentId, status, teamId, notes) => {
+      try {
+        // 1. Send request to backend and await confirmed entity
+        const confirmedIncident = await apiFetch<Incident>(`/incidents/${incidentId}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status, teamId, notes }),
+        });
+
+        // 2. Update store only upon confirmed backend response
+        set((state) => {
+          const updatedIncidents = state.incidents.map((inc) =>
+            inc.id === confirmedIncident.id || (confirmedIncident.trackingCode && inc.trackingCode === confirmedIncident.trackingCode)
+              ? confirmedIncident
+              : inc
+          );
+
+          const updatedTeams = state.rescueTeams.map((t) => {
+            if (t.id === teamId || t.currentIncident === confirmedIncident.id) {
+              if (confirmedIncident.status === 'resolved') {
+                return { ...t, status: 'available' as const, currentIncident: undefined, lastUpdated: new Date().toISOString() };
+              } else if (confirmedIncident.status === 'on_scene') {
+                return { ...t, status: 'on_scene' as const, lastUpdated: new Date().toISOString() };
+              } else if (confirmedIncident.status === 'en_route') {
+                return { ...t, status: 'en_route' as const, lastUpdated: new Date().toISOString() };
+              }
+            }
+            return t;
+          });
+
+          return { incidents: updatedIncidents, rescueTeams: updatedTeams };
+        });
+
+        // 3. Broadcast confirmed update to other tabs
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('nova-emergency-bus');
+            bc.postMessage({
+              type: 'mission_status_updated',
+              data: confirmedIncident,
+            });
+            bc.close();
+          } catch {}
+        }
+
+        // 4. Refresh both incidents and teams from server after key status changes
+        await Promise.allSettled([get().fetchIncidents(), get().fetchTeams()]);
+        get().refreshStats();
+      } catch (err: any) {
+        // Re-throw the original error (preserving ApiError status/code for UI)
+        throw err;
+      }
+    },
 
     // ─── Teams ──────────────────────────────────────────────
     rescueTeams: [],
     fetchTeams: async () => {
-      set(s => ({ loading: { ...s.loading, teams: true } }));
+      set(s => ({ loading: { ...s.loading, teams: true }, errors: { ...s.errors, teams: null } }));
       try {
         const teams = await apiFetch<RescueTeam[]>('/rescue-teams');
         if (Array.isArray(teams)) {
@@ -396,6 +620,7 @@ export const useNovaStore = create<AppState>()(
         }
       } catch (err) {
         console.warn('Backend rescue teams API error:', err);
+        set(s => ({ errors: { ...s.errors, teams: err instanceof Error ? err.message : 'Unable to load rescue teams.' } }));
       } finally {
         set(s => ({ loading: { ...s.loading, teams: false } }));
         get().refreshStats();
@@ -411,7 +636,7 @@ export const useNovaStore = create<AppState>()(
     // ─── Hospitals ──────────────────────────────────────────
     hospitals: [],
     fetchHospitals: async () => {
-      set(s => ({ loading: { ...s.loading, hospitals: true } }));
+      set(s => ({ loading: { ...s.loading, hospitals: true }, errors: { ...s.errors, hospitals: null } }));
       try {
         const hospitals = await apiFetch<Hospital[]>('/hospitals');
         if (Array.isArray(hospitals)) {
@@ -419,6 +644,7 @@ export const useNovaStore = create<AppState>()(
         }
       } catch (err) {
         console.warn('Backend hospitals API error:', err);
+        set(s => ({ errors: { ...s.errors, hospitals: err instanceof Error ? err.message : 'Unable to load hospitals.' } }));
       } finally {
         set(s => ({ loading: { ...s.loading, hospitals: false } }));
       }
@@ -433,7 +659,7 @@ export const useNovaStore = create<AppState>()(
     // ─── Resources ──────────────────────────────────────────
     resources: [],
     fetchResources: async () => {
-      set(s => ({ loading: { ...s.loading, resources: true } }));
+      set(s => ({ loading: { ...s.loading, resources: true }, errors: { ...s.errors, resources: null } }));
       try {
         const resources = await apiFetch<Resource[]>('/resources');
         if (Array.isArray(resources)) {
@@ -441,6 +667,7 @@ export const useNovaStore = create<AppState>()(
         }
       } catch (err) {
         console.warn('Backend resources API error:', err);
+        set(s => ({ errors: { ...s.errors, resources: err instanceof Error ? err.message : 'Unable to load resources.' } }));
       } finally {
         set(s => ({ loading: { ...s.loading, resources: false } }));
       }
@@ -511,19 +738,56 @@ export const useNovaStore = create<AppState>()(
         unreadCount: 0,
       })),
     unreadCount: 0,
+    alerts: [],
+    fetchAlerts: async () => {
+      set(s => ({ loading: { ...s.loading, alerts: true }, errors: { ...s.errors, alerts: null } }));
+      try {
+        const alerts = await apiFetch<OperationalAlert[]>('/alerts/live');
+        if (Array.isArray(alerts)) set({ alerts });
+      } catch (err) {
+        console.warn('Backend alerts API error:', err);
+        set(s => ({ errors: { ...s.errors, alerts: err instanceof Error ? err.message : 'Unable to load alerts.' } }));
+      } finally {
+        set(s => ({ loading: { ...s.loading, alerts: false } }));
+      }
+    },
 
-    // ─── Fetch All Data (called on app mount) ─────────────────
+    // ─── Fetch All Data (called on app mount with request deduplication) ─────────────────
     fetchAllData: async () => {
-      const state = get();
-      await Promise.allSettled([
-        state.fetchIncidents(),
-        state.fetchTeams(),
-        state.fetchHospitals(),
-        state.fetchResources(),
-        state.fetchPredictions(),
-        state.fetchNotifications(),
-      ]);
-      get().refreshStats();
+      if (fetchAllDataPromise) {
+        return fetchAllDataPromise;
+      }
+
+      fetchAllDataPromise = (async () => {
+        const state = get();
+        const userRole = state.currentUser?.role;
+
+        if (userRole === 'citizen') {
+          await Promise.allSettled([
+            state.fetchIncidents(),
+            state.fetchNotifications(),
+            state.fetchAlerts(),
+          ]);
+        } else {
+          await Promise.allSettled([
+            state.fetchIncidents(),
+            state.fetchTeams(),
+            state.fetchHospitals(),
+            state.fetchResources(),
+            state.fetchPredictions(),
+            state.fetchNotifications(),
+            state.fetchAlerts(),
+          ]);
+        }
+
+        get().refreshStats();
+        // Clear promise cache after 4 seconds to allow fresh updates
+        setTimeout(() => {
+          fetchAllDataPromise = null;
+        }, 4000);
+      })();
+
+      return fetchAllDataPromise;
     },
 
     // ─── Simulation (frontend-only) ──────────────────────────
@@ -531,6 +795,7 @@ export const useNovaStore = create<AppState>()(
       isActive: false,
       currentStep: 0,
       elapsedTime: 0,
+      startTime: undefined,
       scenario: 'flood_colombo',
       incidents: [],
       riskLevel: 0,
@@ -539,7 +804,8 @@ export const useNovaStore = create<AppState>()(
     },
     startSimulation: () => {
       const state = get();
-      set({ simulation: { ...state.simulation, isActive: true, currentStep: 0 } });
+      const now = Date.now();
+      set({ simulation: { ...state.simulation, isActive: true, currentStep: 0, startTime: now } });
 
       SIMULATION_STEPS_DATA.forEach((step) => {
         setTimeout(() => {

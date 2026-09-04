@@ -11,10 +11,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/predictions")
-@RequiredArgsConstructor
 public class RiskPredictionController {
 
     private final RiskPredictionRepository riskPredictionRepository;
+
+    public RiskPredictionController(RiskPredictionRepository riskPredictionRepository) {
+        this.riskPredictionRepository = riskPredictionRepository;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<RiskPrediction>>> getAll() {

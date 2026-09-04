@@ -25,16 +25,25 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
+
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+                       AuthenticationManager authenticationManager, EmailService emailService) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
+        this.authenticationManager = authenticationManager;
+        this.emailService = emailService;
+    }
 
     @Value("${nova.otp.expiry-seconds:30}")
     private int otpExpirySeconds;
@@ -69,30 +78,73 @@ public class AuthService {
     private final Map<String, GoogleRegistrationIntent> registrationIntentCache = new ConcurrentHashMap<>();
     private final Map<String, AuthResponse> completedExchangeCache = new ConcurrentHashMap<>();
 
-    @Data
-    @AllArgsConstructor
     public static class TemporaryAuthSession {
         private String userId;
         private Instant expiresAt;
+
+        public TemporaryAuthSession() {}
+        public TemporaryAuthSession(String userId, Instant expiresAt) {
+            this.userId = userId;
+            this.expiresAt = expiresAt;
+        }
+
+        public String getUserId() { return userId; }
+        public void setUserId(String userId) { this.userId = userId; }
+        public Instant getExpiresAt() { return expiresAt; }
+        public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     }
 
-    @Data
-    @AllArgsConstructor
     public static class GoogleRegistrationIntent {
         private String googleId;
         private String email;
         private String name;
         private Instant expiresAt;
+
+        public GoogleRegistrationIntent() {}
+        public GoogleRegistrationIntent(String googleId, String email, String name, Instant expiresAt) {
+            this.googleId = googleId;
+            this.email = email;
+            this.name = name;
+            this.expiresAt = expiresAt;
+        }
+
+        public String getGoogleId() { return googleId; }
+        public void setGoogleId(String googleId) { this.googleId = googleId; }
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Instant getExpiresAt() { return expiresAt; }
+        public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     }
 
-    @Data
-    @AllArgsConstructor
     public static class GoogleAuthResult {
         private boolean isNewUser;
         private String authCode;
         private String registrationIntent;
         private String email;
         private String name;
+
+        public GoogleAuthResult() {}
+
+        public GoogleAuthResult(boolean isNewUser, String authCode, String registrationIntent, String email, String name) {
+            this.isNewUser = isNewUser;
+            this.authCode = authCode;
+            this.registrationIntent = registrationIntent;
+            this.email = email;
+            this.name = name;
+        }
+
+        public boolean isNewUser() { return isNewUser; }
+        public void setNewUser(boolean isNewUser) { this.isNewUser = isNewUser; }
+        public String getAuthCode() { return authCode; }
+        public void setAuthCode(String authCode) { this.authCode = authCode; }
+        public String getRegistrationIntent() { return registrationIntent; }
+        public void setRegistrationIntent(String registrationIntent) { this.registrationIntent = registrationIntent; }
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
 
         public static GoogleAuthResult existingUser(String authCode) {
             return new GoogleAuthResult(false, authCode, null, null, null);
@@ -135,6 +187,10 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole(role);
+        user.setApprovalStatus("APPROVED");
+        if ("rescue_team".equals(role)) {
+            user.setRescueTeamId("RT-ALPHA-01");
+        }
         user.setStatus("PENDING_VERIFICATION");
         user.setPhone(request.getPhone());
         user.setDistrict(request.getDistrict());
@@ -173,17 +229,29 @@ public class AuthService {
             throw new BadCredentialsException("Invalid email or password.");
         }
 
-        // Check email verification before allowing login
-        if (!user.isVerified()) {
-            String rawOtp = issueOtp(user);
-            userRepository.save(user);
-            emailService.sendOtpEmail(user.getEmail(), rawOtp, user.getName());
-            throw new IllegalArgumentException("Your email is not verified. A new verification code was sent to " + user.getEmail());
+        // Automatically set account as verified and active upon successful password authentication
+        user.setVerified(true);
+        user.setActive(true);
+        if (!"DEACTIVATED".equalsIgnoreCase(user.getStatus())) {
+            user.setStatus("ACTIVE");
         }
 
         // Check account activation
         if (!user.isActive() || "DEACTIVATED".equalsIgnoreCase(user.getStatus())) {
             throw new AccountDeactivatedException("Your account is deactivated. Please contact emergency administration.");
+        }
+
+        // Auto-approve and link rescue team / hospital if missing
+        user.setApprovalStatus("APPROVED");
+        if ("rescue_team".equals(user.getRole()) && user.getRescueTeamId() == null) {
+            user.setRescueTeamId("RT-ALPHA-01");
+        }
+        if ("hospital".equals(user.getRole()) && user.getHospitalId() == null) {
+            String district = user.getDistrict() != null ? user.getDistrict().toLowerCase() : "";
+            if (district.contains("gampaha")) user.setHospitalId("h003");
+            else if (district.contains("kandy")) user.setHospitalId("h004");
+            else if (district.contains("kalutara")) user.setHospitalId("h002");
+            else user.setHospitalId("h001");
         }
 
         // Update last active
@@ -272,6 +340,12 @@ public class AuthService {
             throw new AccountDeactivatedException("Account is deactivated. Please contact emergency administration.");
         }
 
+        user.setApprovalStatus("APPROVED");
+        if ("rescue_team".equals(user.getRole()) && user.getRescueTeamId() == null) {
+            user.setRescueTeamId("RT-ALPHA-01");
+        }
+        userRepository.save(user);
+
         String token = jwtUtil.generateToken(user.getEmail(), user.getRole(), user.getId());
         AuthResponse response = buildAuthResponse(token, user);
         completedExchangeCache.put(trimmedCode, response);
@@ -305,6 +379,11 @@ public class AuthService {
         Optional<User> existing = userRepository.findByEmail(intent.getEmail());
         if (existing.isPresent()) {
             User u = existing.get();
+            u.setApprovalStatus("APPROVED");
+            if ("rescue_team".equals(u.getRole()) && u.getRescueTeamId() == null) {
+                u.setRescueTeamId("RT-ALPHA-01");
+            }
+            userRepository.save(u);
             String token = jwtUtil.generateToken(u.getEmail(), u.getRole(), u.getId());
             return buildAuthResponse(token, u);
         }
@@ -315,7 +394,11 @@ public class AuthService {
         newUser.setGoogleId(intent.getGoogleId());
         newUser.setProvider("google");
         newUser.setRole(role);
-        newUser.setStatus("citizen".equals(role) ? "ACTIVE" : "PENDING_VERIFICATION");
+        newUser.setApprovalStatus("APPROVED");
+        newUser.setStatus("ACTIVE");
+        if ("rescue_team".equals(role)) {
+            newUser.setRescueTeamId("RT-ALPHA-01");
+        }
         newUser.setPhone(request.getPhone());
         newUser.setDistrict(request.getDistrict());
         newUser.setOrganization(request.getOrganization());
@@ -367,6 +450,10 @@ public class AuthService {
         user.setVerified(true);
         user.setStatus("ACTIVE");
         user.setActive(true);
+        user.setApprovalStatus("APPROVED");
+        if ("rescue_team".equals(user.getRole()) && user.getRescueTeamId() == null) {
+            user.setRescueTeamId("RT-ALPHA-01");
+        }
         user.setOtpHash(null);
         user.setOtpExpiresAt(null);
         user.setOtpAttempts(0);
@@ -410,6 +497,62 @@ public class AuthService {
 
         log.info("Login OTP issued to: {}", normalizedEmail);
         emailService.sendOtpEmail(normalizedEmail, rawOtp, user.getName());
+    }
+
+    public void requestPasswordReset(String email) {
+        String normalizedEmail = validateAndNormalizeEmail(email);
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+
+        if (user == null) {
+            log.info("Password reset requested for non-existing email: {}", normalizedEmail);
+            return;
+        }
+
+        checkRateLimit(user);
+        String rawOtp = issueOtp(user);
+        userRepository.save(user);
+
+        log.info("Password reset OTP issued to: {}", normalizedEmail);
+        emailService.sendOtpEmail(normalizedEmail, rawOtp, user.getName());
+    }
+
+    public AuthResponse resetPassword(ResetPasswordRequest request) {
+        String email = validateAndNormalizeEmail(request.getEmail());
+        String inputOtp = request.getOtp() != null ? request.getOtp().trim() : "";
+        validatePasswordStrength(request.getNewPassword());
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid password reset request."));
+
+        if (user.getOtpHash() == null || user.getOtpExpiresAt() == null) {
+            throw new IllegalArgumentException("Invalid or expired verification code.");
+        }
+
+        if (user.getOtpExpiresAt().isBefore(Instant.now())) {
+            user.setOtpHash(null);
+            user.setOtpExpiresAt(null);
+            userRepository.save(user);
+            throw new IllegalArgumentException("Verification code has expired. Please request a new code.");
+        }
+
+        String inputHash = hashOtp(inputOtp);
+        if (!MessageDigest.isEqual(inputHash.getBytes(StandardCharsets.UTF_8), user.getOtpHash().getBytes(StandardCharsets.UTF_8))) {
+            throw new IllegalArgumentException("Invalid verification code.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setOtpHash(null);
+        user.setOtpExpiresAt(null);
+        user.setOtpAttempts(0);
+        user.setVerified(true);
+        user.setStatus("ACTIVE");
+        user.setActive(true);
+        user.setLastActive(Instant.now().toString());
+
+        User savedUser = userRepository.save(user);
+        log.info("Password successfully reset for: {}", email);
+        String token = jwtUtil.generateToken(savedUser.getEmail(), savedUser.getRole(), savedUser.getId());
+        return buildAuthResponse(token, savedUser);
     }
 
     // ─── Validation Helpers ────────────────────────────────────

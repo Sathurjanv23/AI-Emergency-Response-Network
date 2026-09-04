@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useMemo } from 'react';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { AuthGuard } from '@/components/shared/AuthGuard';
@@ -12,10 +13,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { AlertTriangle, Map, Brain, Users, Clock, Activity, Zap, BarChart3, Cpu } from 'lucide-react';
 import { cn, getTeamStatusColor, formatTimeAgo } from '@/lib/utils';
-import { useEffect, useRef, useState, useMemo } from 'react';
-import {
-  LineChart, Line, Tooltip, XAxis
-} from 'recharts';
+import type { Incident } from '@/types';
+import dynamic from 'next/dynamic';
+
+const LazyCommandTrendChart = dynamic(
+  () => import('@/components/charts/LazyCommandTrendChart'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-24 flex items-center justify-center text-xs text-nova-text-dim animate-pulse">
+        Loading response telemetry...
+      </div>
+    ),
+  }
+);
 import { useTranslation } from '@/lib/i18n';
 
 // ─── NOVA Copilot Mini Widget ────────────────────────────────
@@ -236,19 +247,11 @@ export default function CommandCenterPage() {
                 <span className="text-[10px] font-mono text-nova-text-muted">Live telemetry</span>
               </div>
               <div className="h-24 flex items-center justify-center">
-                {mounted && trendData.length > 0 ? (
-                  <LineChart width={400} height={96} data={trendData}>
-                    <Tooltip
-                      contentStyle={{ background: '#0d1629', border: '1px solid #1a2744', borderRadius: '8px', fontSize: '10px', color: '#e8f0fe' }}
-                      formatter={(v: any) => [`${parseFloat(v).toFixed(1)} ${t('common.min')}`, t('stats.avg_response')]}
-                    />
-                    <Line type="monotone" dataKey="avgTime" stroke="#00d4ff" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  </LineChart>
-                ) : (
-                  <div className="text-xs text-nova-text-dim text-center py-2">
-                    {mounted ? 'No response time trend data available.' : 'Loading telemetry...'}
-                  </div>
-                )}
+                <LazyCommandTrendChart
+                  data={trendData}
+                  minLabel={t('common.min')}
+                  responseLabel={t('stats.avg_response')}
+                />
               </div>
             </div>
 

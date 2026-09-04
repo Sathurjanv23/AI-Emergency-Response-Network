@@ -14,10 +14,12 @@ export interface AuthUser {
   email: string;
   role: 'citizen' | 'officer' | 'rescue_team' | 'hospital' | 'admin';
   status?: 'ACTIVE' | 'PENDING_VERIFICATION' | 'DEACTIVATED';
+  approvalStatus?: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED';
   avatarUrl?: string;
   phone?: string;
   district?: string;
   organization?: string;
+  rescueTeamId?: string;
   createdAt: string;
   lastActive: string;
   isActive: boolean;
@@ -233,8 +235,8 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 
     const { accessToken, user } = json.data || {};
 
-    if (!user?.isVerified || !accessToken) {
-      return { success: true, user, requiresVerification: true };
+    if (!accessToken) {
+      return { success: false, error: 'Login failed. Security token not issued.' };
     }
 
     saveToken(accessToken);
@@ -263,7 +265,7 @@ export async function exchangeOAuthCode(code: string): Promise<AuthResult> {
     if (!res.ok || !json.success) {
       return {
         success: false,
-        error: json.message || 'Google authorization failed or expired. Please try again.',
+        error: json.message || `Google authorization failed (HTTP ${res.status}). Please try again.`,
         statusCode: res.status,
       };
     }
@@ -272,8 +274,8 @@ export async function exchangeOAuthCode(code: string): Promise<AuthResult> {
     if (accessToken) saveToken(accessToken);
     if (user) saveUser(user);
     return { success: true, user };
-  } catch {
-    return { success: false, error: 'Cannot connect to backend server.' };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Cannot connect to backend server.' };
   }
 }
 
@@ -361,27 +363,67 @@ export function getSession(): AuthUser | null {
   }
 }
 
+export async function fetchCurrentUser(): Promise<AuthUser> {
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success || !json.data) {
+    throw new Error(json.message || `Unable to load current user (${res.status})`);
+  }
+  const user = json.data as AuthUser;
+  saveUser(user);
+  return user;
+}
+
 // ─── Forgot Password ─────────────────────────────────────────
 
 export async function forgotPassword(
   email: string
-): Promise<{ success: boolean; message: string; demoToken?: string }> {
+): Promise<{ success: boolean; message: string }> {
   const emailErr = validateEmail(email);
   if (emailErr) return { success: false, message: emailErr };
 
-  return {
-    success: true,
-    message: `If ${email} is registered, a password recovery link has been dispatched.`,
-  };
+  try {
+    const res = await authFetch('/auth/forgot-password', { email });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json.success) {
+      return { success: false, message: json.message || 'Failed to send verification code.' };
+    }
+
+    return { success: true, message: json.message || 'If registered, a verification code has been sent to your email.' };
+  } catch {
+    return { success: false, message: 'Cannot connect to backend server.' };
+  }
 }
 
 // ─── Reset Password ──────────────────────────────────────────
 
-export async function resetPassword(token: string, newPassword: string): Promise<AuthResult> {
+export async function resetPassword(email: string, otp: string, newPassword: string): Promise<AuthResult> {
+  const emailErr = validateEmail(email);
+  if (emailErr) return { success: false, error: emailErr, field: 'email' };
+
+  if (!otp || !otp.trim()) return { success: false, error: 'OTP code is required', field: 'otp' };
+
   const passErr = validatePassword(newPassword);
   if (passErr) return { success: false, error: passErr, field: 'password' };
 
-  return { success: false, error: 'Password reset via backend not yet configured.' };
+  try {
+    const res = await authFetch('/auth/reset-password', { email, otp, newPassword });
+    const json = await res.json().catch(() => ({}));
+
+    if (!res.ok || !json.success) {
+      return { success: false, error: json.message || 'Password reset failed. Please try again.' };
+    }
+
+    const { accessToken, user } = json.data || {};
+    if (accessToken) saveToken(accessToken);
+    if (user) saveUser(user);
+    return { success: true, user };
+  } catch {
+    return { success: false, error: 'Cannot connect to backend server.' };
+  }
 }
 
 // ─── Google OAuth Initiate ───────────────────────────────────

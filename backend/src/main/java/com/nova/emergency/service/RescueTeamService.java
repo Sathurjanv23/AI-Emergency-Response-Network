@@ -11,10 +11,13 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class RescueTeamService {
 
     private final RescueTeamRepository rescueTeamRepository;
+
+    public RescueTeamService(RescueTeamRepository rescueTeamRepository) {
+        this.rescueTeamRepository = rescueTeamRepository;
+    }
 
     public List<RescueTeam> getAll() {
         return rescueTeamRepository.findAll();

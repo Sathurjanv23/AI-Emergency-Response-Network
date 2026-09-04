@@ -9,12 +9,16 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class EmailService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EmailService.class);
+
     private final JavaMailSender mailSender;
+
+    public EmailService(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
 
     @Value("${spring.mail.username:sathu20030303@gmail.com}")
     private String fromEmail;

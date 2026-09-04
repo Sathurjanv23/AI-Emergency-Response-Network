@@ -12,10 +12,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/rescue-teams")
-@RequiredArgsConstructor
 public class RescueTeamController {
 
     private final RescueTeamService rescueTeamService;
+
+    public RescueTeamController(RescueTeamService rescueTeamService) {
+        this.rescueTeamService = rescueTeamService;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<RescueTeam>>> getAll() {

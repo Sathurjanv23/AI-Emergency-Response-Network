@@ -27,6 +27,11 @@ public class User {
     // citizen | officer | rescue_team | hospital | admin
     private String role;
 
+    // APPROVED for citizens and approved privileged users; PENDING_APPROVAL or REJECTED otherwise.
+    private String approvalStatus = "APPROVED";
+    private String rescueTeamId;
+    private String hospitalId;
+
     // ACTIVE | PENDING_VERIFICATION | DEACTIVATED
     private String status = "ACTIVE";
 
@@ -66,4 +71,51 @@ public class User {
 
     // email | google
     private String provider = "email";
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public String getApprovalStatus() { return approvalStatus; }
+    public void setApprovalStatus(String approvalStatus) { this.approvalStatus = approvalStatus; }
+    public String getRescueTeamId() { return rescueTeamId; }
+    public void setRescueTeamId(String rescueTeamId) { this.rescueTeamId = rescueTeamId; }
+    public String getHospitalId() { return hospitalId; }
+    public void setHospitalId(String hospitalId) { this.hospitalId = hospitalId; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getDistrict() { return district; }
+    public void setDistrict(String district) { this.district = district; }
+    public String getOrganization() { return organization; }
+    public void setOrganization(String organization) { this.organization = organization; }
+    public String getLanguage() { return language; }
+    public void setLanguage(String language) { this.language = language; }
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+    public String getLastActive() { return lastActive; }
+    public void setLastActive(String lastActive) { this.lastActive = lastActive; }
+    public boolean isActive() { return isActive; }
+    public void setActive(boolean active) { isActive = active; }
+    public boolean isVerified() { return isVerified; }
+    public void setVerified(boolean verified) { isVerified = verified; }
+    public String getOtpHash() { return otpHash; }
+    public void setOtpHash(String otpHash) { this.otpHash = otpHash; }
+    public Instant getOtpExpiresAt() { return otpExpiresAt; }
+    public void setOtpExpiresAt(Instant otpExpiresAt) { this.otpExpiresAt = otpExpiresAt; }
+    public int getOtpAttempts() { return otpAttempts; }
+    public void setOtpAttempts(int otpAttempts) { this.otpAttempts = otpAttempts; }
+    public Instant getOtpRequestedAt() { return otpRequestedAt; }
+    public void setOtpRequestedAt(Instant otpRequestedAt) { this.otpRequestedAt = otpRequestedAt; }
+    public String getGoogleId() { return googleId; }
+    public void setGoogleId(String googleId) { this.googleId = googleId; }
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
 }

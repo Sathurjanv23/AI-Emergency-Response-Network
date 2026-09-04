@@ -10,7 +10,12 @@ import { StatCard } from '@/components/emergency/StatCard';
 import { Users, Activity, Settings, Shield, FileText, AlertTriangle, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const UserRoleDistributionChart = dynamic(
+  () => import('@/components/charts/AdminActivityChart').then((m) => m.UserRoleDistributionChart),
+  { ssr: false }
+);
 import type { AuditLog, User } from '@/types';
 import { useTranslation } from '@/lib/i18n';
 
@@ -131,16 +136,7 @@ export default function AdminDashboardPage() {
                 <Link href="/admin/users" className="text-xs text-nova-cyan hover:underline">{t('btn.manage')} →</Link>
               </div>
               <div className="h-40 flex items-center justify-center overflow-hidden">
-                {mounted ? (
-                  <BarChart width={420} height={150} data={userCountData}>
-                    <XAxis dataKey="role" tick={{ fill: '#4a5a7a', fontSize: 10 }} />
-                    <YAxis tick={{ fill: '#4a5a7a', fontSize: 10 }} />
-                    <Tooltip contentStyle={{ background: '#0d1629', border: '1px solid #1a2744', borderRadius: '8px', fontSize: '10px', color: '#e8f0fe' }} />
-                    <Bar dataKey="count" fill="#00d4ff" radius={[4, 4, 0, 0]} name="Users" isAnimationActive={false} />
-                  </BarChart>
-                ) : (
-                  <div className="w-full h-full bg-nova-surface2 animate-pulse rounded-lg" />
-                )}
+                <UserRoleDistributionChart data={userCountData} />
               </div>
             </div>
 

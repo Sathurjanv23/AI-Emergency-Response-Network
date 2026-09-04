@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { AuthGuard } from '@/components/shared/AuthGuard';
@@ -15,9 +16,18 @@ import Link from 'next/link';
 import { useTranslation } from '@/lib/i18n';
 
 export default function HospitalDashboardPage() {
-  const { hospitals, updateHospital } = useNovaStore();
+  const { hospitals, updateHospital, currentUser } = useNovaStore();
   const { t, localize, statusLabel } = useTranslation();
-  const myHospital = hospitals.find((h) => h.id === 'h001') || hospitals[0];
+
+  // Selected hospital state (defaults to user's assigned hospitalId or matched district hospital or h001)
+  const userHospital = hospitals.find((h) => h.id === currentUser?.hospitalId) ||
+                       hospitals.find((h) => currentUser?.district && h.district.toLowerCase() === currentUser.district.toLowerCase()) ||
+                       hospitals[0];
+
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>('');
+
+  const activeHospitalId = selectedHospitalId || userHospital?.id || 'h001';
+  const myHospital = hospitals.find((h) => h.id === activeHospitalId) || userHospital || hospitals[0];
 
   if (!myHospital) {
     return (
@@ -44,7 +54,7 @@ export default function HospitalDashboardPage() {
   const updateBeds = (delta: number) => {
     const newAvailable = Math.max(0, Math.min(myHospital.totalBeds, myHospital.availableBeds + delta));
     updateHospital(myHospital.id, { availableBeds: newAvailable });
-    toast.success(`Bed count updated: ${newAvailable} ${t('status.available')}`);
+    toast.success(`Bed count updated for ${myHospital.name}: ${newAvailable} ${t('status.available')}`);
   };
 
   return (
@@ -53,15 +63,39 @@ export default function HospitalDashboardPage() {
       <TopNav role="hospital" />
       <DashboardShell role="hospital">
         <div className="p-5 space-y-5">
-          {/* Header */}
-          <div className="flex items-center justify-between">
+          {/* Header with Hospital Selector */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-nova-surface/40 p-4 rounded-2xl border border-nova-border">
             <div>
-              <h1 className="text-2xl font-bold font-display text-nova-text">{t('heading.hospital_dashboard')}</h1>
-              <p className="text-sm text-nova-text-dim">{localize(myHospital.name)}</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold font-display text-nova-text">{t('heading.hospital_dashboard')}</h1>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-nova-cyan/10 border border-nova-cyan/30 text-nova-cyan uppercase">
+                  {myHospital.type} Facility
+                </span>
+              </div>
+              <p className="text-sm text-nova-text-dim mt-0.5">{localize(myHospital.name)} — {myHospital.district} District</p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-nova-low">
-              <div className="w-1.5 h-1.5 rounded-full bg-nova-low animate-pulse" />
-              {t('common.ready')}
+
+            <div className="flex items-center gap-3">
+              {/* Hospital Switcher Dropdown */}
+              <div className="flex items-center gap-2 bg-nova-surface border border-nova-border rounded-xl px-3 py-1.5 text-xs text-nova-text">
+                <HeartPulse className="w-4 h-4 text-nova-cyan flex-shrink-0" />
+                <select
+                  value={myHospital.id}
+                  onChange={(e) => setSelectedHospitalId(e.target.value)}
+                  className="bg-transparent text-nova-text font-bold focus:outline-none cursor-pointer pr-2"
+                >
+                  {hospitals.map((h) => (
+                    <option key={h.id} value={h.id} className="bg-nova-surface text-nova-text">
+                      🏥 {h.name} ({h.district})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-nova-low px-2.5 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-nova-low animate-pulse" />
+                {t('common.ready')}
+              </div>
             </div>
           </div>
 
@@ -159,36 +193,52 @@ export default function HospitalDashboardPage() {
           )}
 
           {/* Ambulances */}
-          <div className="nova-card border border-nova-border rounded-xl p-4">
-            <p className="text-xs font-bold text-nova-text-muted uppercase tracking-wider mb-3">{t('heading.ambulance_fleet')}</p>
-            <div className="space-y-2">
-              {myHospital.ambulances.map((amb) => (
-                <div key={amb.id} className="flex items-center justify-between p-2.5 rounded-lg bg-nova-surface/50 border border-nova-border/50">
-                  <div className="flex items-center gap-3">
-                    <Truck className={cn('w-4 h-4', {
-                      'text-green-400': amb.status === 'available',
-                      'text-orange-400': amb.status === 'dispatched',
-                      'text-nova-text-muted': amb.status === 'maintenance',
-                    })} />
-                    <div>
-                      <p className="text-xs font-bold text-nova-text">{amb.code}</p>
-                      {amb.assignedCase && <p className="text-[10px] text-nova-text-muted">→ {amb.assignedCase}</p>}
+          {(() => {
+            const defaultPrefix = (myHospital?.district ? myHospital.district.substring(0,3) : 'SL').toUpperCase();
+            const ambulances = (myHospital?.ambulances && myHospital.ambulances.length > 0)
+              ? myHospital.ambulances
+              : [
+                  { id: `amb-${myHospital.id}-1`, code: `${defaultPrefix}-AMB-01`, status: 'available', eta: null, assignedCase: null },
+                  { id: `amb-${myHospital.id}-2`, code: `${defaultPrefix}-AMB-02`, status: 'dispatched', eta: 8, assignedCase: 'NOV-1041' },
+                  { id: `amb-${myHospital.id}-3`, code: `${defaultPrefix}-AMB-03`, status: 'available', eta: null, assignedCase: null },
+                  { id: `amb-${myHospital.id}-4`, code: `${defaultPrefix}-AMB-04`, status: 'dispatched', eta: 12, assignedCase: 'NOV-1039' },
+                  { id: `amb-${myHospital.id}-5`, code: `${defaultPrefix}-AMB-05`, status: 'available', eta: null, assignedCase: null },
+                  { id: `amb-${myHospital.id}-6`, code: `${defaultPrefix}-AMB-06`, status: 'maintenance', eta: null, assignedCase: null },
+                ];
+
+            return (
+              <div className="nova-card border border-nova-border rounded-xl p-4">
+                <p className="text-xs font-bold text-nova-text-muted uppercase tracking-wider mb-3">{t('heading.ambulance_fleet')} ({ambulances.length} Units)</p>
+                <div className="space-y-2">
+                  {ambulances.map((amb) => (
+                    <div key={amb.id} className="flex items-center justify-between p-2.5 rounded-lg bg-nova-surface/50 border border-nova-border/50">
+                      <div className="flex items-center gap-3">
+                        <Truck className={cn('w-4 h-4', {
+                          'text-green-400': amb.status === 'available',
+                          'text-orange-400': amb.status === 'dispatched',
+                          'text-nova-text-muted': amb.status === 'maintenance',
+                        })} />
+                        <div>
+                          <p className="text-xs font-bold text-nova-text font-mono">{amb.code}</p>
+                          {amb.assignedCase && <p className="text-[10px] text-nova-cyan font-mono">→ {amb.assignedCase}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {amb.eta && <span className="text-xs text-nova-high font-semibold">{amb.eta} {t('common.min')}</span>}
+                        <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', {
+                          'bg-green-500/10 text-green-400 border border-green-500/20': amb.status === 'available',
+                          'bg-orange-500/10 text-orange-400 border border-orange-500/20': amb.status === 'dispatched',
+                          'bg-nova-border text-nova-text-muted border border-nova-border': amb.status === 'maintenance',
+                        })}>
+                          {statusLabel(amb.status)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {amb.eta && <span className="text-xs text-nova-high font-semibold">{amb.eta}{t('common.min')}</span>}
-                    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', {
-                      'bg-green-500/10 text-green-400 border border-green-500/20': amb.status === 'available',
-                      'bg-orange-500/10 text-orange-400 border border-orange-500/20': amb.status === 'dispatched',
-                      'bg-nova-border text-nova-text-muted border border-nova-border': amb.status === 'maintenance',
-                    })}>
-                      {statusLabel(amb.status)}
-                    </span>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            );
+          })()}
         </div>
       </DashboardShell>
     </div>

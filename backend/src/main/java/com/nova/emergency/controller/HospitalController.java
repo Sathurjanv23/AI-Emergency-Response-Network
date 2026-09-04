@@ -13,10 +13,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/hospitals")
-@RequiredArgsConstructor
 public class HospitalController {
 
     private final HospitalRepository hospitalRepository;
+
+    public HospitalController(HospitalRepository hospitalRepository) {
+        this.hospitalRepository = hospitalRepository;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Hospital>>> getAll() {

@@ -44,28 +44,16 @@ export function NovaLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 
 export function AlertTicker() {
   const { localize, t } = useTranslation();
-  const { notifications, riskPredictions, incidents } = useNovaStore();
-
-  const activeAlerts: string[] = [];
-
-  // Critical active incidents
-  incidents
-    .filter((i) => i.severity === 'critical' && i.status !== 'resolved')
-    .forEach((i) => activeAlerts.push(`🔴 CRITICAL: ${i.id} — ${i.title} (${i.location.district || ''})`));
-
-  // High risk predictions
-  riskPredictions
-    .filter((rp) => rp.floodRisk >= 70 || rp.overallRisk >= 70)
-    .forEach((rp) => activeAlerts.push(`⚠️ ELEVATED RISK: ${rp.zone} (${rp.district}) — Flood Risk ${rp.floodRisk}%`));
-
-  // Unread critical/high notifications
-  notifications
-    .filter((n) => !n.read && (n.severity === 'critical' || n.severity === 'high'))
-    .forEach((n) => activeAlerts.push(`📢 ${n.title} — ${n.message}`));
+  const { alerts, loading, errors } = useNovaStore();
+  const activeAlerts = alerts.map((alert) => `${alert.title || alert.type}: ${alert.message}`);
 
   const displayList = activeAlerts.length > 0
     ? activeAlerts
-    : ['All operational sectors normal — No active critical emergency alerts'];
+    : errors.alerts
+      ? [`Live alerts unavailable: ${errors.alerts}`]
+      : loading.alerts
+        ? ['Loading live alerts...']
+        : ['All operational sectors normal — No active critical emergency alerts'];
 
   return (
     <div className={cn(

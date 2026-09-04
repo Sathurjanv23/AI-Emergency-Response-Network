@@ -1,8 +1,7 @@
 package com.nova.emergency.controller;
 
 import com.nova.emergency.dto.ApiResponse;
-import com.nova.emergency.exception.AccountConflictException;
-import com.nova.emergency.exception.AccountDeactivatedException;
+import com.nova.emergency.exception.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,25 +10,80 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
-@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler({ResourceNotFoundException.class, IncidentNotFoundException.class})
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(ResourceNotFoundException ex) {
+        log.warn("Incident not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("INCIDENT_NOT_FOUND", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidStatusTransitionException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidStatusTransition(InvalidStatusTransitionException ex) {
+        log.warn("Invalid status transition: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("INVALID_STATUS_TRANSITION", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidStatus(InvalidStatusException ex) {
+        log.warn("Invalid status: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("INVALID_STATUS", ex.getMessage()));
+    }
+
+    @ExceptionHandler(UnauthorizedMissionUpdateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnauthorizedMissionUpdate(UnauthorizedMissionUpdateException ex) {
+        log.warn("Unauthorized mission update: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("UNAUTHORIZED_TEAM", ex.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
+        String rawMsg = ex.getMessage() != null ? ex.getMessage() : "Conflict";
+        // Extract structured conflict code prefix if present (e.g. "INCIDENT_ALREADY_ASSIGNED: ...")
+        String code;
+        String message;
+        int colonIdx = rawMsg.indexOf(":");
+        if (colonIdx > 0 && colonIdx < 50) {
+            String prefix = rawMsg.substring(0, colonIdx).trim();
+            if (prefix.matches("[A-Z_]+")) {
+                code = prefix;
+                message = rawMsg.substring(colonIdx + 1).trim();
+            } else {
+                code = "CONFLICT";
+                message = rawMsg;
+            }
+        } else {
+            code = "CONFLICT";
+            message = rawMsg;
+        }
+        log.warn("Conflict / illegal state [{}]: {}", code, message);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(code, message));
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException ex) {
         log.warn("Bad request: {}", ex.getMessage());
-        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+        return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", ex.getMessage()));
     }
 
     @ExceptionHandler(AccountConflictException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccountConflict(AccountConflictException ex) {
         log.warn("Account conflict: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("ACCOUNT_CONFLICT", ex.getMessage()));
     }
 
     @ExceptionHandler({
@@ -76,10 +130,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(errors));
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableRequest(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", "Request body must be valid JSON."));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {
-        log.error("Unhandled error: {}", ex.getMessage(), ex);
+        String causeInfo = ex.getCause() != null
+                ? ex.getCause().getClass().getSimpleName() + ": " + ex.getCause().getMessage()
+                : "none";
+        log.error("Unhandled error: {} (Caused by: {})", ex.getMessage(), causeInfo, ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("An internal error occurred. Please try again."));
+                .body(ApiResponse.error("INTERNAL_ERROR", "An internal error occurred. Please try again."));
     }
 }

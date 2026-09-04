@@ -5,12 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { useNovaStore } from '@/lib/store/nova-store';
-import { adminApi } from '@/lib/api/client';
-import { Settings, Users, Activity, FileText, Database, Cpu } from 'lucide-react';
+import { adminApi, rescueTeamsApi } from '@/lib/api/client';
+import { Settings, Users, Activity, FileText, Database, Cpu, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '@/lib/i18n';
-import type { User, AuditLog } from '@/types';
+import type { User, AuditLog, RescueTeam } from '@/types';
 
 export default function AdminOperationsCatchAll() {
   const params = useParams<{ slug: string[] }>();
@@ -20,13 +20,17 @@ export default function AdminOperationsCatchAll() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [rescueTeams, setRescueTeams] = useState<RescueTeam[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<Record<string, string>>({});
+  const [savingUser, setSavingUser] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [usersRes, logsRes] = await Promise.allSettled([
+        const [usersRes, logsRes, teamsRes] = await Promise.allSettled([
           adminApi.getUsers(),
           adminApi.getAuditLogs(),
+          rescueTeamsApi.getAll(),
         ]);
         if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)) {
           setUsers(usersRes.value);
@@ -34,12 +38,33 @@ export default function AdminOperationsCatchAll() {
         if (logsRes.status === 'fulfilled' && Array.isArray(logsRes.value)) {
           setAuditLogs(logsRes.value);
         }
+        if (teamsRes.status === 'fulfilled' && Array.isArray(teamsRes.value)) {
+          setRescueTeams(teamsRes.value);
+        }
       } catch {
         // Fallback to empty arrays
       }
     }
     loadData();
   }, []);
+
+  const updateApproval = async (user: User, decision: 'APPROVE' | 'REJECT') => {
+    const rescueTeamId = selectedTeams[user.id];
+    if (decision === 'APPROVE' && user.role === 'rescue_team' && !rescueTeamId) {
+      toast.error('Select a rescue team before approving this user.');
+      return;
+    }
+    setSavingUser(user.id);
+    try {
+      const updated = await adminApi.approveUser(user.id, decision, rescueTeamId) as User;
+      setUsers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      toast.success(decision === 'APPROVE' ? 'User approved and linked.' : 'User request rejected.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update approval.');
+    } finally {
+      setSavingUser(null);
+    }
+  };
 
   // 1. USERS LIST PANEL
   const renderUsers = () => {
@@ -57,6 +82,7 @@ export default function AdminOperationsCatchAll() {
                 <th className="p-4">Role</th>
                 <th className="p-4">District</th>
                 <th className="p-4">{t('stats.status')}</th>
+                <th className="p-4">Access</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-nova-border/50 text-sm text-nova-text">
@@ -69,14 +95,32 @@ export default function AdminOperationsCatchAll() {
                     <td className="p-4 text-xs text-nova-text-muted">{user.district ? localize(user.district) : 'National'}</td>
                     <td className="p-4">
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full">
-                        {statusLabel('active')}
+                        {user.approvalStatus || user.status || statusLabel('active')}
                       </span>
+                    </td>
+                    <td className="p-4">
+                      {user.role !== 'citizen' && user.approvalStatus !== 'APPROVED' ? (
+                        <div className="flex items-center gap-2">
+                          {user.role === 'rescue_team' && (
+                            <select
+                              value={selectedTeams[user.id] || ''}
+                              onChange={(event) => setSelectedTeams((current) => ({ ...current, [user.id]: event.target.value }))}
+                              className="bg-nova-surface2 border border-nova-border rounded px-2 py-1 text-xs text-nova-text"
+                            >
+                              <option value="">Select team</option>
+                              {rescueTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                            </select>
+                          )}
+                          <button type="button" disabled={savingUser === user.id} onClick={() => updateApproval(user, 'APPROVE')} className="text-green-400 hover:text-green-300" aria-label="Approve user"><CheckCircle className="w-4 h-4" /></button>
+                          <button type="button" disabled={savingUser === user.id} onClick={() => updateApproval(user, 'REJECT')} className="text-red-400 hover:text-red-300" aria-label="Reject user"><XCircle className="w-4 h-4" /></button>
+                        </div>
+                      ) : <span className="text-xs text-nova-text-muted">Approved</span>}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-xs text-nova-text-dim">
+                  <td colSpan={6} className="p-8 text-center text-xs text-nova-text-dim">
                     No user accounts registered in database.
                   </td>
                 </tr>

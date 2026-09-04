@@ -5,6 +5,8 @@ import com.nova.emergency.model.AuditLog;
 import com.nova.emergency.model.User;
 import com.nova.emergency.repository.AuditLogRepository;
 import com.nova.emergency.repository.UserRepository;
+import com.nova.emergency.repository.RescueTeamRepository;
+import com.nova.emergency.model.RescueTeam;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,12 +20,19 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
-@RequiredArgsConstructor
 public class AdminController {
 
     private final UserRepository userRepository;
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RescueTeamRepository rescueTeamRepository;
+
+    public AdminController(UserRepository userRepository, AuditLogRepository auditLogRepository, PasswordEncoder passwordEncoder, RescueTeamRepository rescueTeamRepository) {
+        this.userRepository = userRepository;
+        this.auditLogRepository = auditLogRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.rescueTeamRepository = rescueTeamRepository;
+    }
 
     @GetMapping("/users")
     public ResponseEntity<ApiResponse<List<User>>> getUsers() {
@@ -40,6 +49,7 @@ public class AdminController {
         user.setEmail(((String) data.get("email")).toLowerCase());
         user.setPasswordHash(passwordEncoder.encode((String) data.get("password")));
         user.setRole((String) data.get("role"));
+        user.setApprovalStatus("citizen".equalsIgnoreCase(user.getRole()) ? "APPROVED" : "PENDING_APPROVAL");
         user.setPhone((String) data.get("phone"));
         user.setDistrict((String) data.get("district"));
         user.setOrganization((String) data.get("organization"));
@@ -63,11 +73,55 @@ public class AdminController {
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
         if (data.containsKey("name")) user.setName((String) data.get("name"));
         if (data.containsKey("role")) user.setRole((String) data.get("role"));
+        if (data.containsKey("approvalStatus")) {
+            String approvalStatus = (String) data.get("approvalStatus");
+            String requestedTeamId = data.containsKey("rescueTeamId") ? (String) data.get("rescueTeamId") : user.getRescueTeamId();
+            if ("APPROVED".equalsIgnoreCase(approvalStatus) && "rescue_team".equals(user.getRole())
+                && (requestedTeamId == null || rescueTeamRepository.findById(requestedTeamId).isEmpty())) {
+                throw new IllegalArgumentException("An approved rescue user must have a valid rescueTeamId.");
+            }
+            user.setApprovalStatus(approvalStatus);
+        }
         if (data.containsKey("district")) user.setDistrict((String) data.get("district"));
         if (data.containsKey("isActive")) user.setActive((Boolean) data.get("isActive"));
+        if (data.containsKey("rescueTeamId")) {
+            String teamId = (String) data.get("rescueTeamId");
+            if (!"rescue_team".equals(user.getRole())) {
+                throw new IllegalArgumentException("Only rescue users may be linked to a rescue team.");
+            }
+            if (teamId == null || rescueTeamRepository.findById(teamId).isEmpty()) {
+                throw new IllegalArgumentException("Selected rescue team does not exist.");
+            }
+            user.setRescueTeamId(teamId);
+        }
         User saved = userRepository.save(user);
         saved.setPasswordHash(null);
         return ResponseEntity.ok(ApiResponse.ok(saved, "User updated"));
+    }
+
+    @PostMapping("/users/{id}/approval")
+    public ResponseEntity<ApiResponse<User>> approveUser(@PathVariable String id, @RequestBody Map<String, String> data) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+        String decision = data.get("decision");
+        if (!"APPROVE".equalsIgnoreCase(decision) && !"REJECT".equalsIgnoreCase(decision)) {
+            throw new IllegalArgumentException("Decision must be APPROVE or REJECT.");
+        }
+        if ("APPROVE".equalsIgnoreCase(decision) && "rescue_team".equals(user.getRole())) {
+            String teamId = data.get("rescueTeamId");
+            if (teamId == null || rescueTeamRepository.findById(teamId).isEmpty()) {
+                throw new IllegalArgumentException("A valid rescueTeamId is required for rescue approval.");
+            }
+            user.setRescueTeamId(teamId);
+        }
+        if ("REJECT".equalsIgnoreCase(decision)) {
+            user.setRescueTeamId(null);
+        }
+        user.setApprovalStatus("APPROVE".equalsIgnoreCase(decision) ? "APPROVED" : "REJECTED");
+        if ("APPROVE".equalsIgnoreCase(decision)) user.setStatus("ACTIVE");
+        User saved = userRepository.save(user);
+        saved.setPasswordHash(null);
+        return ResponseEntity.ok(ApiResponse.ok(saved, "User approval updated"));
     }
 
     @DeleteMapping("/users/{id}")

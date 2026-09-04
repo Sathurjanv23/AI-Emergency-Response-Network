@@ -3,24 +3,36 @@ package com.nova.emergency.controller;
 import com.nova.emergency.dto.*;
 import com.nova.emergency.service.AuthService;
 import com.nova.emergency.service.GoogleOAuthService;
+import com.nova.emergency.repository.UserRepository;
+import com.nova.emergency.model.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.security.Principal;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthController.class);
 
     private final AuthService authService;
     private final GoogleOAuthService googleOAuthService;
+    @Autowired(required = false)
+    private UserRepository userRepository;
+
+    public AuthController(AuthService authService, GoogleOAuthService googleOAuthService) {
+        this.authService = authService;
+        this.googleOAuthService = googleOAuthService;
+    }
 
     @Value("${spring.security.oauth2.client.registration.google.client-id:NOT_SET}")
     private String googleClientId;
@@ -72,6 +84,25 @@ public class AuthController {
             "sent",
             "A new verification code has been sent. It expires in 30 seconds."
         ));
+    }
+
+    // ─── Forgot Password Request ──────────────────────────────
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<String>> forgotPassword(@Valid @RequestBody OtpRequestDto request) {
+        authService.requestPasswordReset(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.ok(
+            "sent",
+            "If an account is associated with this email, a verification code has been sent."
+        ));
+    }
+
+    // ─── Reset Password ───────────────────────────────────────
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<AuthResponse>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        AuthResponse auth = authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(auth, "Password has been successfully reset."));
     }
 
     // ─── Google OAuth — Initiate ────────────────────────────────
@@ -162,7 +193,13 @@ public class AuthController {
     // ─── Me ────────────────────────────────────────────────────
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<String>> me() {
-        return ResponseEntity.ok(ApiResponse.ok("authenticated", "OK"));
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<AuthResponse.UserDto>> me(Principal principal) {
+        if (userRepository == null) {
+            throw new IllegalStateException("User repository is unavailable.");
+        }
+        User user = userRepository.findByEmail(principal.getName().toLowerCase().trim())
+            .orElseThrow(() -> new IllegalArgumentException("Authenticated user account not found."));
+        return ResponseEntity.ok(ApiResponse.ok(AuthResponse.UserDto.from(user), "OK"));
     }
 }

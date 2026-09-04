@@ -8,13 +8,21 @@
 export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low';
 
 export type IncidentStatus =
+  | 'submitted'
+  | 'analysing'
+  | 'verified'
+  | 'dispatched'
+  | 'acknowledged'
+  | 'en_route'
+  | 'on_scene'
+  | 'transporting'
+  | 'resolved'
+  | 'cancelled'
   | 'reported'
   | 'ai_analyzed'
   | 'prioritized'
   | 'assigned'
-  | 'en_route'
   | 'responding'
-  | 'resolved'
   | 'closed';
 
 export type TeamStatus = 'available' | 'assigned' | 'en_route' | 'on_scene' | 'unavailable';
@@ -29,12 +37,71 @@ export type EmergencyType =
   | 'fire'
   | 'road_accident'
   | 'medical'
+  | 'crime'
   | 'missing_person'
   | 'building_collapse'
   | 'severe_weather'
-  | 'other';
+  | 'other'
+  | 'unknown';
 
 export type Language = 'en' | 'ta' | 'si';
+
+export interface OperationalAlert {
+  id: string;
+  type: string;
+  title?: string;
+  message: string;
+  severity: SeverityLevel;
+  timestamp: string;
+  incidentId?: string;
+  trackingCode?: string;
+}
+
+export type AgencyType =
+  | 'command_centre'
+  | 'police'
+  | 'ambulance'
+  | 'fire_rescue'
+  | 'hospital'
+  | 'disaster_response'
+  | 'search_rescue';
+
+export type DeliveryStatus =
+  | 'queued'
+  | 'sent'
+  | 'delivered'
+  | 'failed'
+  | 'acknowledged';
+
+export interface AgencyNotification {
+  id: string;
+  agency: AgencyType;
+  agencyName: string;
+  destination: string;
+  channel: 'portal' | 'sms' | 'email' | 'push' | 'radio';
+  sentAt: string;
+  status: DeliveryStatus;
+  failureReason?: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+}
+
+export interface AssignedUnit {
+  id: string;
+  unitType: 'ambulance' | 'police' | 'rescue_team' | 'fire_engine';
+  name: string;
+  callSign: string;
+  distanceKm: number;
+  etaMinutes: number;
+  status: 'assigned' | 'en_route' | 'on_scene' | 'transporting' | 'completed';
+}
+
+export type PermissionStatus =
+  | 'idle'
+  | 'requesting'
+  | 'granted'
+  | 'denied'
+  | 'unavailable';
 
 // ─── User ───────────────────────────────────────────────────
 
@@ -43,9 +110,12 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  status?: 'ACTIVE' | 'PENDING_VERIFICATION' | 'DEACTIVATED';
   phone?: string;
   district?: string;
   organization?: string;
+  rescueTeamId?: string;
+  approvalStatus?: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED';
   language: Language;
   createdAt: string;
   lastActive: string;
@@ -63,9 +133,10 @@ export interface GeoLocation {
   district?: string;
   zone?: string;
   accuracy?: number;
+  capturedAt?: string;
 }
 
-// ─── AI Analysis ────────────────────────────────────────────
+// ─── AI Analysis ────────────────────────────────────
 
 export interface AIAnalysis {
   id: string;
@@ -83,6 +154,9 @@ export interface AIAnalysis {
   imageAnalysis?: ImageAnalysisResult;
   riskFactors: string[];
   estimatedResponseTime: number; // minutes
+  recommendedAgencies?: AgencyType[];
+  duplicateWarning?: string;
+  voiceTranscript?: string;
 }
 
 export interface VulnerablePerson {
@@ -109,6 +183,7 @@ export interface ImageAnalysisResult {
 
 export interface Incident {
   id: string;
+  trackingCode?: string;
   type: EmergencyType;
   severity: SeverityLevel;
   status: IncidentStatus;
@@ -133,7 +208,22 @@ export interface Incident {
   resourcesAllocated?: ResourceAllocation[];
   priority?: number; // 1 = highest
   isSimulation?: boolean;
+  isSilentSos?: boolean;
+  audioUrl?: string;
+  audioTranscript?: string;
+  photoUrls?: string[];
+  manualAddress?: string;
+  locationAccuracy?: number;
+  locationCapturedAt?: string;
+  recommendedAgencies?: AgencyType[];
+  notifiedAgencies?: AgencyNotification[];
+  assignedUnits?: AssignedUnit[];
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  resolvedAt?: string;
 }
+
+export type EmergencyIncident = Incident;
 
 export interface IncidentNote {
   id: string;
@@ -398,6 +488,7 @@ export interface SimulationState {
   isActive: boolean;
   currentStep: number;
   elapsedTime: number;
+  startTime?: number;
   scenario: 'flood_colombo';
   incidents: Incident[];
   riskLevel: number;

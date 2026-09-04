@@ -9,10 +9,13 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class ResourceService {
 
     private final ResourceRepository resourceRepository;
+
+    public ResourceService(ResourceRepository resourceRepository) {
+        this.resourceRepository = resourceRepository;
+    }
 
     public List<Resource> getAll() {
         return resourceRepository.findAll();
