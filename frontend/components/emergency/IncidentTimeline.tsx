@@ -5,8 +5,15 @@ import { cn } from '@/lib/utils';
 import type { IncidentStatus } from '@/types';
 import { useTranslation } from '@/lib/i18n';
 
-const STATUS_ORDER: IncidentStatus[] = [
-  'reported', 'ai_analyzed', 'prioritized', 'assigned', 'en_route', 'responding', 'resolved',
+const STATUS_ORDER: { key: IncidentStatus; label: string; aliases: IncidentStatus[] }[] = [
+  { key: 'submitted', label: 'Report Submitted', aliases: ['reported', 'submitted'] },
+  { key: 'analysing', label: 'AI Risk Analysis', aliases: ['ai_analyzed', 'analysing'] },
+  { key: 'verified', label: 'Verified & Prioritized', aliases: ['prioritized', 'verified'] },
+  { key: 'acknowledged', label: 'Squad Dispatched & Acknowledged', aliases: ['assigned', 'dispatched', 'acknowledged'] },
+  { key: 'en_route', label: 'Responders En Route', aliases: ['en_route'] },
+  { key: 'on_scene', label: 'Responders On Scene', aliases: ['on_scene', 'responding'] },
+  { key: 'transporting', label: 'Hospital Transport / Triage', aliases: ['transporting'] },
+  { key: 'resolved', label: 'Incident Resolved', aliases: ['resolved', 'closed'] },
 ];
 
 interface IncidentTimelineProps {
@@ -17,19 +24,24 @@ interface IncidentTimelineProps {
 
 export function IncidentTimeline({ currentStatus, updates = [], compact = false }: IncidentTimelineProps) {
   const { t, statusLabel, localize } = useTranslation();
-  const currentIndex = STATUS_ORDER.indexOf(currentStatus);
+
+  const currentIndex = STATUS_ORDER.findIndex((step) =>
+    step.key === currentStatus || step.aliases.includes(currentStatus)
+  );
 
   return (
     <div className="space-y-1">
-      {STATUS_ORDER.map((statusKey, idx) => {
+      {STATUS_ORDER.map((statusItem, idx) => {
         const isCompleted = idx < currentIndex;
         const isCurrent = idx === currentIndex;
         const isPending = idx > currentIndex;
-        const update = updates.find((u) => u.status === statusKey);
+        const update = updates.find(
+          (u) => u.status === statusItem.key || statusItem.aliases.includes(u.status)
+        );
 
         return (
           <motion.div
-            key={statusKey}
+            key={statusItem.key}
             className="flex items-start gap-3"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
@@ -75,13 +87,13 @@ export function IncidentTimeline({ currentStatus, updates = [], compact = false 
                   isPending && 'text-nova-text-muted'
                 )}
               >
-                {statusLabel(statusKey)}
+                {statusItem.label}
                 {isCurrent && (
                   <span className="ml-2 text-[10px] font-bold text-nova-cyan bg-nova-cyan/10 px-1.5 py-0.5 rounded-full border border-nova-cyan/30">
                     {t('common.current')}
                   </span>
                 )}
-                {statusKey === 'ai_analyzed' && update?.isAI && (
+                {statusItem.key === 'analysing' && update?.isAI && (
                   <span className="ml-2 text-[10px] font-bold text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded-full border border-purple-400/30">
                     AI
                   </span>

@@ -11,6 +11,7 @@ public interface IncidentRepository extends MongoRepository<Incident, String> {
     List<Incident> findByStatusOrderByPriorityAsc(String status);
     List<Incident> findByLocationDistrictOrderByPriorityAsc(String district);
     List<Incident> findByStatusNotInOrderByPriorityAsc(List<String> statuses);
+    java.util.Optional<Incident> findByTrackingCode(String trackingCode);
     long countBySeverity(String severity);
     long countByStatus(String status);
 }

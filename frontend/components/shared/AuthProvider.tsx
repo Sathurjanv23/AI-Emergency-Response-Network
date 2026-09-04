@@ -2,14 +2,12 @@
 
 import { useEffect } from 'react';
 import { useNovaStore } from '@/lib/store/nova-store';
-import { getSession, getToken } from '@/lib/auth';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+import { fetchCurrentUser, getSession, getToken } from '@/lib/auth';
 
 /**
  * AuthProvider — Mounts once in the layout and rehydrates the auth session
  * from localStorage so users stay logged in across page refreshes.
- * Also initiates live data fetch and SSE real-time updates.
+ * Also initiates authenticated live data polling.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { login, isAuthenticated, fetchAllData, addIncident, updateIncident } = useNovaStore();
@@ -23,6 +21,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: session.name,
           email: session.email,
           role: session.role,
+          status: session.status,
+          approvalStatus: session.approvalStatus,
+          rescueTeamId: session.rescueTeamId,
           language: session.language,
           createdAt: session.createdAt,
           lastActive: session.lastActive,
@@ -31,41 +32,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Fetch live backend data
-    fetchAllData();
-
-    // Setup real-time SSE listener
     const token = getToken();
-    let eventSource: EventSource | null = null;
+    if (!token) return;
 
-    try {
-      // Connect to SSE stream
-      eventSource = new EventSource(`${API_BASE}/events/stream`);
+    let active = true;
+    const hydrate = async () => {
+      try {
+        const user = await fetchCurrentUser();
+        if (!active) return;
 
-      eventSource.addEventListener('incident_created', (e) => {
-        try {
-          const newIncident = JSON.parse(e.data);
-          addIncident(newIncident);
-        } catch {}
-      });
+        // Commit auth state first
+        login({
+          id: user.id, name: user.name, email: user.email, role: user.role,
+          language: user.language || 'en', createdAt: user.createdAt,
+          lastActive: user.lastActive, isActive: user.isActive,
+          status: user.status, isVerified: user.isVerified,
+          rescueTeamId: user.rescueTeamId,
+          approvalStatus: user.approvalStatus,
+        });
 
-      eventSource.addEventListener('incident_updated', (e) => {
-        try {
-          const updatedIncident = JSON.parse(e.data);
-          updateIncident(updatedIncident.id, updatedIncident);
-        } catch {}
-      });
-    } catch {
-      // SSE connection error handled silently
+        // Wait a tick so the Zustand store commits currentUser before
+        // fetchAllData reads currentUser?.role — fixes the role-based
+        // fetch branch race condition.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (!active) return;
+        await fetchAllData();
+      } catch {
+        // API errors are retained by the store for the relevant page to display.
+      }
+    };
+    hydrate();
+
+    const pollingTimer = window.setInterval(() => {
+      if (getToken()) fetchAllData();
+    }, 30000);
+
+    // Setup Cross-Tab BroadcastChannel listener
+    let broadcastChannel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        broadcastChannel = new BroadcastChannel('nova-emergency-bus');
+        broadcastChannel.onmessage = (event) => {
+          const { type, data } = event.data || {};
+          if (type === 'incident_created' && data) {
+            addIncident(data);
+          } else if (type === 'incident_updated' && data) {
+            updateIncident(data.id, data);
+          } else if (type === 'mission_accepted' && data) {
+            updateIncident(data.incidentId, {
+              status: 'acknowledged',
+              assignedTeam: data.teamName || data.teamId,
+              assignedTeamId: data.teamId,
+              assignedTeamName: data.teamName || data.teamId,
+            });
+          } else if (type === 'mission_status_updated' && data) {
+            updateIncident(data.incidentId, {
+              status: data.status,
+            });
+          }
+        };
+      } catch {}
     }
 
     return () => {
-      if (eventSource) {
-        eventSource.close();
+      active = false;
+      window.clearInterval(pollingTimer);
+      if (broadcastChannel) {
+        broadcastChannel.close();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated, fetchAllData, login, addIncident, updateIncident]);
 
   return <>{children}</>;
 }

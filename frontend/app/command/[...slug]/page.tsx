@@ -19,9 +19,21 @@ export default function CommandOperationsCatchAll() {
   const slug = params?.slug?.[0] || '';
   const { t, localize, statusLabel, timeAgo } = useTranslation();
 
-  const { rescueTeams, resources, hospitals, notifications, updateTeam, updateResource, updateHospital } = useNovaStore();
+  const { rescueTeams, resources, hospitals, alerts, loading, errors, updateTeam, updateResource, updateHospital } = useNovaStore();
 
   const [filterTerm, setFilterTerm] = useState('');
+
+  const operationalKey = slug === 'rescue' ? 'teams' : slug === 'resources' ? 'resources' : slug === 'hospitals' ? 'hospitals' : slug === 'alerts' ? 'alerts' : null;
+  const operationalLoading = operationalKey ? loading[operationalKey] : false;
+  const operationalError = operationalKey ? errors[operationalKey] : null;
+
+  if (operationalLoading) {
+    return <div className="min-h-screen bg-nova-bg"><TopNav role="officer" /><DashboardShell role="officer"><div className="p-12 text-center text-nova-text-muted">Loading operational data...</div></DashboardShell></div>;
+  }
+
+  if (operationalError) {
+    return <div className="min-h-screen bg-nova-bg"><TopNav role="officer" /><DashboardShell role="officer"><div className="p-12 text-center"><AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" /><h2 className="text-base font-bold text-nova-text">Unable to load operational data</h2><p className="text-xs text-red-300 mt-2">{operationalError}</p></div></DashboardShell></div>;
+  }
 
   // ─── Render Panels based on slug ─────────────────────────────
 
@@ -59,6 +71,7 @@ export default function CommandOperationsCatchAll() {
               </div>
             </div>
           ))}
+          {filteredTeams.length === 0 && <p className="text-sm text-nova-text-muted py-8 text-center">No rescue deployments returned by the backend.</p>}
         </div>
       </div>
     );
@@ -104,6 +117,7 @@ export default function CommandOperationsCatchAll() {
                     <td className="p-4 font-mono text-xs text-nova-text-muted">{res.lowStockThreshold} {res.unit}</td>
                   </tr>
                 ))}
+                {resources.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-sm text-nova-text-muted">No resources returned by the backend.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -155,6 +169,7 @@ export default function CommandOperationsCatchAll() {
               </div>
             );
           })}
+          {hospitals.length === 0 && <p className="text-sm text-nova-text-muted py-8 text-center">No hospitals returned by the backend.</p>}
         </div>
       </div>
     );
@@ -168,21 +183,22 @@ export default function CommandOperationsCatchAll() {
           <h2 className="text-lg font-bold text-nova-text flex items-center gap-2">
             <Bell className="w-5 h-5 text-nova-cyan" /> {t('heading.alert_logs')}
           </h2>
-          <span className="text-xs text-nova-text-muted">{notifications.length} {t('nav.alerts')}</span>
+          <span className="text-xs text-nova-text-muted">{alerts.length} {t('nav.alerts')}</span>
         </div>
         <div className="nova-card border border-nova-border rounded-xl p-3 divide-y divide-nova-border/50">
-          {notifications.map((notif) => (
-            <div key={notif.id} className="p-3 flex items-start gap-3 hover:bg-nova-surface/10 transition-colors">
+          {alerts.map((alert) => (
+            <div key={alert.id} className="p-3 flex items-start gap-3 hover:bg-nova-surface/10 transition-colors">
               <span className="text-lg mt-0.5">
-                {notif.severity === 'critical' ? '🔴' : notif.severity === 'high' ? '🟠' : '🟡'}
+                {alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟠' : '🟡'}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-nova-text">{localize(notif.title)}</p>
-                <p className="text-xs text-nova-text-dim mt-0.5">{localize(notif.message)}</p>
-                <p className="text-[10px] text-nova-text-muted mt-1">{timeAgo(notif.createdAt)}</p>
+                <p className="text-sm font-semibold text-nova-text">{localize(alert.title || alert.type)}</p>
+                <p className="text-xs text-nova-text-dim mt-0.5">{localize(alert.message)}</p>
+                <p className="text-[10px] text-nova-text-muted mt-1">{timeAgo(alert.timestamp)}</p>
               </div>
             </div>
           ))}
+          {alerts.length === 0 && <p className="p-8 text-center text-sm text-nova-text-muted">No live alerts returned by the backend.</p>}
         </div>
       </div>
     );

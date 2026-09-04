@@ -8,9 +8,10 @@ import { RiskGauge } from '@/components/emergency/RiskGauge';
 import { motion } from 'framer-motion';
 import { Waves, TrendingUp, Brain, AlertTriangle, CloudRain, Thermometer } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Legend
-} from 'recharts';
+import dynamic from 'next/dynamic';
+
+const RiverLevelTrendChart = dynamic(() => import('@/components/charts/PredictionCharts').then(m => m.RiverLevelTrendChart), { ssr: false });
+const ZoneRiskBreakdownChart = dynamic(() => import('@/components/charts/PredictionCharts').then(m => m.ZoneRiskBreakdownChart), { ssr: false });
 
 const TIME_OPTIONS = [
   { label: 'Current', hours: 0 },
@@ -205,20 +206,7 @@ export default function PredictionPage() {
                 )}
               </div>
               <div className="h-48 flex items-center justify-center overflow-hidden">
-                {mounted && riverTelemetryTrend.length > 0 ? (
-                  <AreaChart width={420} height={180} data={riverTelemetryTrend}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(26,39,68,0.6)" />
-                    <XAxis dataKey="time" tick={{ fill: '#4a5a7a', fontSize: 10 }} />
-                    <YAxis tick={{ fill: '#4a5a7a', fontSize: 10 }} />
-                    <Tooltip contentStyle={{ background: '#0d1629', border: '1px solid #1a2744', borderRadius: '8px', fontSize: '10px', color: '#e8f0fe' }} />
-                    <Area type="monotone" dataKey="level" stroke="#3b82f6" fill="rgba(59,130,246,0.15)" strokeWidth={2} name="River Level (m)" isAnimationActive={false} />
-                    <Area type="monotone" dataKey="alert" stroke="#ff3b3b" fill="none" strokeDasharray="4 4" strokeWidth={1.5} name="Alert Threshold" isAnimationActive={false} />
-                  </AreaChart>
-                ) : (
-                  <div className="text-xs text-nova-text-dim text-center py-6">
-                    {mounted ? 'No live river sensor data available.' : 'Loading telemetry...'}
-                  </div>
-                )}
+                <RiverLevelTrendChart data={riverTelemetryTrend} />
               </div>
             </div>
 
@@ -229,22 +217,14 @@ export default function PredictionPage() {
                 <p className="text-xs font-bold text-nova-text">Risk Breakdown by Zone</p>
               </div>
               <div className="h-48 flex items-center justify-center overflow-hidden">
-                {mounted && riskPredictions.length > 0 ? (
-                  <BarChart width={420} height={180} data={riskPredictions.map((rp) => ({ name: rp.zone, Flood: rp.floodRisk, Landslide: rp.landslideRisk, Fire: rp.fireRisk }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(26,39,68,0.6)" />
-                    <XAxis dataKey="name" tick={{ fill: '#4a5a7a', fontSize: 9 }} />
-                    <YAxis tick={{ fill: '#4a5a7a', fontSize: 10 }} />
-                    <Tooltip contentStyle={{ background: '#0d1629', border: '1px solid #1a2744', borderRadius: '8px', fontSize: '10px', color: '#e8f0fe' }} />
-                    <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    <Bar dataKey="Flood" fill="#3b82f6" radius={[2, 2, 0, 0]} isAnimationActive={false} />
-                    <Bar dataKey="Landslide" fill="#ff7a00" radius={[2, 2, 0, 0]} isAnimationActive={false} />
-                    <Bar dataKey="Fire" fill="#ff3b3b" radius={[2, 2, 0, 0]} isAnimationActive={false} />
-                  </BarChart>
-                ) : (
-                  <div className="text-xs text-nova-text-dim text-center py-6">
-                    {mounted ? 'No verified zone risk data available.' : 'Loading risk models...'}
-                  </div>
-                )}
+                <ZoneRiskBreakdownChart
+                  data={riskPredictions.map((rp) => ({
+                    name: rp.zone,
+                    Flood: rp.floodRisk,
+                    Landslide: rp.landslideRisk,
+                    Fire: rp.fireRisk,
+                  }))}
+                />
               </div>
             </div>
           </div>

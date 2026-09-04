@@ -90,37 +90,54 @@ function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const { login } = useNovaStore();
 
-  // In a real app the token comes from the reset email link: ?token=<jwt>
-  // In demo mode we embed the userId directly as the token
-  const token = searchParams.get('token') ?? '';
-
+  const [email, setEmail] = useState(searchParams.get('email') ?? '');
+  const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
-  // If no token, show an error state
-  const noToken = !token;
-
   const validate = (): boolean => {
+    let valid = true;
+    if (!email.trim()) {
+      setEmailError('Email is required');
+      valid = false;
+    }
+    if (!otp.trim()) {
+      setOtpError('Verification code is required');
+      valid = false;
+    }
     const pErr = validatePassword(password);
     const cErr = validateConfirmPassword(password, confirmPassword);
-    setPasswordError(pErr);
-    setConfirmError(cErr);
-    return !pErr && !cErr;
+    if (pErr) {
+      setPasswordError(pErr);
+      valid = false;
+    }
+    if (cErr) {
+      setConfirmError(cErr);
+      valid = false;
+    }
+    return valid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError(null);
+    setEmailError(null);
+    setOtpError(null);
+    setPasswordError(null);
+    setConfirmError(null);
+
     if (!validate()) return;
 
     setLoading(true);
-    const result = await resetPassword(token, password);
+    const result = await resetPassword(email, otp, password);
     setLoading(false);
 
     if (!result.success) {
@@ -128,20 +145,22 @@ function ResetPasswordContent() {
       return;
     }
 
-    // Auto sign-in with the new credentials
-    login({
-      id: result.user.id,
-      name: result.user.name,
-      email: result.user.email,
-      role: result.user.role,
-      language: result.user.language,
-      createdAt: result.user.createdAt,
-      lastActive: result.user.lastActive,
-      isActive: true,
-    });
+    // Auto sign-in with the new credentials if user data is returned
+    if (result.user) {
+      login({
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        role: result.user.role,
+        language: result.user.language,
+        createdAt: result.user.createdAt,
+        lastActive: result.user.lastActive,
+        isActive: true,
+      });
+    }
 
     setSuccess(true);
-    toast.success('Password updated!', { description: 'You are now signed in.' });
+    toast.success('Password updated!', { description: 'Your password has been reset.' });
 
     const ROLE_HREF: Record<string, string> = {
       citizen: '/citizen',
@@ -152,7 +171,11 @@ function ResetPasswordContent() {
     };
 
     setTimeout(() => {
-      router.push(ROLE_HREF[result.user.role] ?? '/');
+      if (result.user) {
+        router.push(ROLE_HREF[result.user.role] ?? '/');
+      } else {
+        router.push('/login');
+      }
     }, 2000);
   };
 
@@ -243,7 +266,7 @@ function ResetPasswordContent() {
             )}
 
             {/* ─ Reset Form ─ */}
-            {!noToken && !success && (
+            {!success && (
               <motion.div key="form" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                 <div className="flex justify-center mb-4">
                   <div className="w-16 h-16 rounded-2xl bg-nova-cyan/10 border border-nova-cyan/20 flex items-center justify-center">
@@ -251,9 +274,9 @@ function ResetPasswordContent() {
                   </div>
                 </div>
                 <div className="text-center mb-6">
-                  <h1 className="text-2xl font-bold text-nova-text">Set New Password</h1>
+                  <h1 className="text-2xl font-bold text-nova-text">Reset Password</h1>
                   <p className="text-sm text-nova-text-dim mt-1.5 leading-relaxed">
-                    Choose a strong password for your NOVA account.
+                    Enter the verification code sent to your email and your new password.
                   </p>
                 </div>
 
@@ -270,6 +293,39 @@ function ResetPasswordContent() {
                 </AnimatePresence>
 
                 <form onSubmit={handleSubmit} noValidate className="space-y-4">
+                  <div>
+                    <label htmlFor="reset-email" className="text-xs font-medium text-nova-text-dim block mb-1.5">Email Address</label>
+                    <input
+                      id="reset-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
+                      placeholder="you@nova.lk"
+                      className={cn(
+                        'w-full bg-nova-surface border rounded-xl px-4 py-2.5 text-sm text-nova-text placeholder:text-nova-text-muted focus:outline-none transition-all',
+                        emailError ? 'border-red-500/60 focus:border-red-500 bg-red-500/5' : 'border-nova-border focus:border-nova-cyan/50 focus:bg-nova-surface2'
+                      )}
+                    />
+                    {emailError && <p className="text-[11px] text-red-400 mt-1">{emailError}</p>}
+                  </div>
+
+                  <div>
+                    <label htmlFor="reset-otp" className="text-xs font-medium text-nova-text-dim block mb-1.5">6-Digit Verification Code (OTP)</label>
+                    <input
+                      id="reset-otp"
+                      type="text"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => { setOtp(e.target.value); setOtpError(null); }}
+                      placeholder="e.g. 123456"
+                      className={cn(
+                        'w-full bg-nova-surface border rounded-xl px-4 py-2.5 text-sm font-mono tracking-widest text-nova-text placeholder:text-nova-text-muted focus:outline-none transition-all text-center',
+                        otpError ? 'border-red-500/60 focus:border-red-500 bg-red-500/5' : 'border-nova-border focus:border-nova-cyan/50 focus:bg-nova-surface2'
+                      )}
+                    />
+                    {otpError && <p className="text-[11px] text-red-400 mt-1">{otpError}</p>}
+                  </div>
+
                   <div>
                     <Field
                       id="new-password"
@@ -290,21 +346,6 @@ function ResetPasswordContent() {
                       }
                     />
                     <PasswordStrengthMeter password={password} />
-                    {password && (
-                      <div className="grid grid-cols-2 gap-1 mt-2">
-                        {[
-                          { met: password.length >= 8, text: '8+ characters' },
-                          { met: /[A-Z]/.test(password), text: 'Uppercase letter' },
-                          { met: /[0-9]/.test(password), text: 'Number' },
-                          { met: /[^A-Za-z0-9]/.test(password), text: 'Special char (optional)' },
-                        ].map(({ met, text }) => (
-                          <div key={text} className={cn('flex items-center gap-1.5 text-[10px] transition-colors', met ? 'text-green-400' : 'text-nova-text-muted')}>
-                            {met ? <CheckCircle className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border border-nova-border" />}
-                            {text}
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   <Field

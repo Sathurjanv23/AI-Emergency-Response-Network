@@ -52,13 +52,21 @@ export function getStatusLabel(status: IncidentStatus | TeamStatus | string, lan
 
 export function getStatusColor(status: IncidentStatus): string {
   const colors: Record<IncidentStatus, string> = {
+    submitted: 'text-nova-text-dim',
+    analysing: 'text-nova-cyan',
+    verified: 'text-nova-medium',
+    dispatched: 'text-nova-blue-bright',
+    acknowledged: 'text-nova-blue-bright',
+    en_route: 'text-nova-high',
+    on_scene: 'text-nova-critical',
+    transporting: 'text-purple-400',
+    resolved: 'text-nova-low',
+    cancelled: 'text-nova-text-muted',
     reported: 'text-nova-text-dim',
     ai_analyzed: 'text-nova-cyan',
     prioritized: 'text-nova-medium',
     assigned: 'text-nova-blue-bright',
-    en_route: 'text-nova-high',
     responding: 'text-nova-critical',
-    resolved: 'text-nova-low',
     closed: 'text-nova-text-muted',
   };
   return colors[status] || 'text-nova-text-dim';
@@ -87,11 +95,13 @@ export function getEmergencyTypeIcon(type: EmergencyType): string {
     landslide: '⛰️',
     fire: '🔥',
     road_accident: '🚗',
-    medical: '🏥',
+    medical: '🚑',
+    crime: '🚨',
     missing_person: '👤',
     building_collapse: '🏚️',
     severe_weather: '🌪️',
     other: '⚠️',
+    unknown: '⚠️',
   };
   return icons[type] || '⚠️';
 }
@@ -144,4 +154,19 @@ export function getRiskBg(riskPercent: number): string {
 
 export function getRiskLabel(riskPercent: number, lang: string = 'en'): string {
   return i18nRiskLabel(riskPercent, lang);
+}
+
+// ─── Media URL Resolver ──────────────────────────────────────
+
+export function resolveMediaUrl(url?: string): string {
+  if (!url || typeof url !== 'string' || !url.trim() || url === 'null' || url === 'undefined' || url.endsWith('/null') || url.endsWith('/undefined')) {
+    return '';
+  }
+  const trimmed = url.trim();
+  if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+  const backendHost = apiBase.replace(/\/api\/?$/, '');
+  return `${backendHost}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
 }

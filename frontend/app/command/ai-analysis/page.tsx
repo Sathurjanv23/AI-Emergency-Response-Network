@@ -5,7 +5,7 @@ import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { useNovaStore } from '@/lib/store/nova-store';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Cpu, Mic, Image, FileText, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
+import { Brain, Cpu, Mic, Image as ImageIcon, FileText, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
 import { SeverityBadge } from '@/components/emergency/SeverityBadge';
 import type { AIAnalysis } from '@/types';
 import { getEmergencyTypeIcon } from '@/lib/utils';
@@ -266,7 +266,7 @@ export default function AIAnalysisPage() {
                   {[
                     { mode: 'text', label: 'Text', icon: <FileText className="w-3.5 h-3.5" /> },
                     { mode: 'voice', label: 'Voice', icon: <Mic className="w-3.5 h-3.5" /> },
-                    { mode: 'image', label: 'Image', icon: <Image className="w-3.5 h-3.5" /> },
+                    { mode: 'image', label: 'Image', icon: <ImageIcon className="w-3.5 h-3.5" /> },
                   ].map((m) => (
                     <button
                       key={m.mode}
@@ -313,7 +313,7 @@ export default function AIAnalysisPage() {
 
                 {inputMode === 'image' && (
                   <div className="border-2 border-dashed border-nova-border rounded-xl p-8 text-center hover:border-nova-cyan/30 transition-colors cursor-pointer">
-                    <Image className="w-8 h-8 text-nova-text-muted mx-auto mb-3" />
+                    <ImageIcon className="w-8 h-8 text-nova-text-muted mx-auto mb-3" />
                     <p className="text-sm text-nova-text-dim">Drop image or click to upload</p>
                     <p className="text-xs text-nova-text-muted mt-1">AI detects flood, fire, structural damage, crowds</p>
                   </div>

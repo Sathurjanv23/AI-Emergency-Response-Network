@@ -82,201 +82,30 @@ function IncidentPopup({ incident, onClose }: { incident: Incident; onClose: () 
   );
 }
 
-// ─── Main Map Component (Leaflet + OpenStreetMap) ──────────────
+import dynamic from 'next/dynamic';
+
+const LazyEmergencyMap = dynamic(
+  () => import('@/components/map/EmergencyMap'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full bg-[#070b14] flex flex-col items-center justify-center text-xs text-nova-cyan space-y-3 animate-pulse">
+        <div className="w-10 h-10 rounded-xl bg-nova-cyan/20 border border-nova-cyan/40 animate-spin" />
+        <p className="font-semibold tracking-wider">INITIALIZING TACTICAL GIS MAP...</p>
+      </div>
+    ),
+  }
+);
 
 export default function LiveMapPage() {
-  const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const layerGroupRef = useRef<any>(null);
 
-  const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [activeFilters, setActiveFilters] = useState<string[]>(['incidents', 'teams', 'hospitals', 'risk']);
   const [searchQuery, setSearchQuery] = useState('');
 
   const { incidents, rescueTeams, hospitals } = useNovaStore();
   const { t, localize, timeAgo } = useTranslation();
-
-  // Initialize Leaflet Map with OpenStreetMap CartoDB Dark Matter / Standard tiles
-  useEffect(() => {
-    let isCancelled = false;
-
-    const initLeafletMap = async () => {
-      try {
-        const L = (await import('leaflet')).default;
-
-        if (!mapContainer.current || isCancelled) return;
-
-        // Ensure container is clean
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
-          mapInstanceRef.current = null;
-        }
-
-        // Center on Sri Lanka [lat, lng]
-        const map = L.map(mapContainer.current, {
-          center: [7.8731, 80.7718],
-          zoom: 8,
-          zoomControl: false,
-          attributionControl: true,
-        });
-
-        // Add Zoom Control at top-right
-        L.control.zoom({ position: 'topright' }).addTo(map);
-
-        // 100% Free OpenStreetMap Standard Tiles (No API key, No watermark)
-        const osmTiles = L.tileLayer(
-          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19,
-          }
-        );
-
-        osmTiles.addTo(map);
-
-        const markerGroup = L.layerGroup().addTo(map);
-        layerGroupRef.current = markerGroup;
-        mapInstanceRef.current = map;
-
-        setMapLoaded(true);
-      } catch (err) {
-        console.error('Failed to initialize OpenStreetMap Leaflet layer:', err);
-      }
-    };
-
-    initLeafletMap();
-
-    return () => {
-      isCancelled = true;
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []);
-
-  // Update Markers when store data or activeFilters change
-  useEffect(() => {
-    if (!mapInstanceRef.current || !layerGroupRef.current) return;
-
-    const updateMarkers = async () => {
-      const L = (await import('leaflet')).default;
-      const markerGroup = layerGroupRef.current;
-      markerGroup.clearLayers();
-
-      // 1. Plot Incidents
-      if (activeFilters.includes('incidents')) {
-        incidents.forEach((incident) => {
-          if (!incident.location?.lat || !incident.location?.lng) return;
-
-          const color =
-            incident.severity === 'critical' ? '#ff3b3b' :
-            incident.severity === 'high' ? '#ff7a00' :
-            incident.severity === 'medium' ? '#ffd700' : '#22c55e';
-
-          const isCritical = incident.severity === 'critical';
-
-          const iconHtml = `
-            <div style="position: relative; width: 22px; height: 22px; cursor: pointer;">
-              ${isCritical ? `<div style="position: absolute; inset: -4px; border-radius: 50%; background: rgba(255, 59, 59, 0.4); animation: pulse 2s infinite;"></div>` : ''}
-              <div style="
-                width: 22px; height: 22px; border-radius: 50%;
-                background: ${color};
-                border: 2px solid #ffffff;
-                box-shadow: 0 0 10px ${color};
-                display: flex; align-items: center; justify-content: center;
-              ">
-                <div style="width: 6px; height: 6px; border-radius: 50%; background: #ffffff;"></div>
-              </div>
-            </div>
-          `;
-
-          const customIcon = L.divIcon({
-            html: iconHtml,
-            className: 'custom-incident-marker',
-            iconSize: [22, 22],
-            iconAnchor: [11, 11],
-          });
-
-          const marker = L.marker([incident.location.lat, incident.location.lng], { icon: customIcon });
-          marker.on('click', () => {
-            setSelectedIncident(incident);
-            mapInstanceRef.current?.panTo([incident.location.lat, incident.location.lng], { animate: true });
-          });
-          marker.addTo(markerGroup);
-        });
-      }
-
-      // 2. Plot Rescue Teams
-      if (activeFilters.includes('teams')) {
-        rescueTeams.forEach((team) => {
-          if (!team.location?.lat || !team.location?.lng) return;
-
-          const teamColor =
-            team.status === 'available' ? '#22c55e' :
-            team.status === 'en_route' ? '#ffd700' : '#00d4ff';
-
-          const iconHtml = `
-            <div style="
-              width: 16px; height: 16px; border-radius: 4px;
-              background: ${teamColor};
-              border: 1.5px solid #ffffff;
-              box-shadow: 0 0 8px ${teamColor};
-              cursor: pointer;
-            "></div>
-          `;
-
-          const customIcon = L.divIcon({
-            html: iconHtml,
-            className: 'custom-team-marker',
-            iconSize: [16, 16],
-            iconAnchor: [8, 8],
-          });
-
-          const marker = L.marker([team.location.lat, team.location.lng], { icon: customIcon });
-          marker.bindTooltip(`🚑 ${team.name} (${team.status})`, {
-            direction: 'top',
-            className: 'leaflet-tooltip-dark',
-          });
-          marker.addTo(markerGroup);
-        });
-      }
-
-      // 3. Plot Hospitals
-      if (activeFilters.includes('hospitals')) {
-        hospitals.forEach((hosp) => {
-          if (!hosp.location?.lat || !hosp.location?.lng) return;
-
-          const iconHtml = `
-            <div style="
-              width: 14px; height: 14px; border-radius: 50%;
-              background: #a855f7;
-              border: 1.5px solid #ffffff;
-              box-shadow: 0 0 8px #a855f7;
-              cursor: pointer;
-            "></div>
-          `;
-
-          const customIcon = L.divIcon({
-            html: iconHtml,
-            className: 'custom-hospital-marker',
-            iconSize: [14, 14],
-            iconAnchor: [7, 7],
-          });
-
-          const marker = L.marker([hosp.location.lat, hosp.location.lng], { icon: customIcon });
-          marker.bindTooltip(`🏥 ${hosp.name} (${hosp.availableBeds} beds)`, {
-            direction: 'top',
-            className: 'leaflet-tooltip-dark',
-          });
-          marker.addTo(markerGroup);
-        });
-      }
-    };
-
-    updateMarkers();
-  }, [incidents, rescueTeams, hospitals, activeFilters]);
 
   // Center on specific incident
   const focusIncident = (incident: Incident) => {
@@ -316,7 +145,17 @@ export default function LiveMapPage() {
           {/* Main Map Viewport */}
           <div className="flex-1 relative bg-[#070b14] overflow-hidden">
             {/* OpenStreetMap Leaflet Container */}
-            <div ref={mapContainer} className="w-full h-full dark-tactical-tiles" />
+            <LazyEmergencyMap
+              incidents={incidents}
+              rescueTeams={rescueTeams}
+              hospitals={hospitals}
+              activeFilters={activeFilters}
+              selectedIncident={selectedIncident}
+              onSelectIncident={(inc) => setSelectedIncident(inc)}
+              onMapReady={(map) => {
+                mapInstanceRef.current = map;
+              }}
+            />
 
             {/* Top-Left Search & Filter Overlay */}
             <div className="absolute top-4 left-4 z-[999] flex items-center gap-2">

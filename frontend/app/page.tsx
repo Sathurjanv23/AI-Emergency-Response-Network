@@ -17,18 +17,34 @@ import { useNovaStore } from '@/lib/store/nova-store';
 
 function useCounter(target: number, duration = 2000, start = false) {
   const [value, setValue] = useState(0);
+  const safeTarget = Number.isFinite(target) ? target : 0;
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 2000;
+
   useEffect(() => {
     if (!start) return;
-    const startTime = Date.now();
-    const timer = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+    let isMounted = true;
+    const startTime = performance.now();
+    let timer: ReturnType<typeof setInterval>;
+
+    const updateValue = () => {
+      if (!isMounted) return;
+
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / safeDuration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(eased * target));
+      setValue(Math.round(eased * safeTarget));
+
       if (progress >= 1) clearInterval(timer);
-    }, 16);
-    return () => clearInterval(timer);
-  }, [target, duration, start]);
+    };
+
+    timer = setInterval(updateValue, 16);
+    updateValue();
+
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [safeTarget, safeDuration, start]);
   return value;
 }
 
@@ -44,12 +60,18 @@ function LiveStats() {
     return () => observer.disconnect();
   }, []);
 
+  const activeIncidents = useCounter(1247, 2000, started);
+  const peopleAssisted = useCounter(48391, 2500, started);
+  const rescueTeams = useCounter(342, 1800, started);
+  const averageResponse = useCounter(114, 2200, started);
+  const aiPredictions = useCounter(873, 2000, started);
+
   const stats = [
-    { value: useCounter(1247, 2000, started), label: 'Active Incidents', unit: '', icon: <AlertTriangle className="w-5 h-5" />, color: 'text-red-400' },
-    { value: useCounter(48391, 2500, started), label: 'People Assisted', unit: '+', icon: <Users className="w-5 h-5" />, color: 'text-nova-cyan' },
-    { value: useCounter(342, 1800, started), label: 'Rescue Teams', unit: '', icon: <Shield className="w-5 h-5" />, color: 'text-green-400' },
-    { value: useCounter(114, 2200, started), label: 'Avg Response (min)', unit: '', icon: <Clock className="w-5 h-5" />, color: 'text-orange-400' },
-    { value: useCounter(873, 2000, started), label: 'AI Predictions', unit: '', icon: <Brain className="w-5 h-5" />, color: 'text-purple-400' },
+    { value: activeIncidents, label: 'Active Incidents', unit: '', icon: <AlertTriangle className="w-5 h-5" />, color: 'text-red-400' },
+    { value: peopleAssisted, label: 'People Assisted', unit: '+', icon: <Users className="w-5 h-5" />, color: 'text-nova-cyan' },
+    { value: rescueTeams, label: 'Rescue Teams', unit: '', icon: <Shield className="w-5 h-5" />, color: 'text-green-400' },
+    { value: averageResponse, label: 'Avg Response (min)', unit: '', icon: <Clock className="w-5 h-5" />, color: 'text-orange-400' },
+    { value: aiPredictions, label: 'AI Predictions', unit: '', icon: <Brain className="w-5 h-5" />, color: 'text-purple-400' },
   ];
 
   return (

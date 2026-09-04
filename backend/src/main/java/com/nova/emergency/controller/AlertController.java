@@ -2,6 +2,8 @@ package com.nova.emergency.controller;
 
 import com.nova.emergency.dto.ApiResponse;
 import com.nova.emergency.model.Notification;
+import com.nova.emergency.model.Incident;
+import com.nova.emergency.repository.IncidentRepository;
 import com.nova.emergency.model.RiskPrediction;
 import com.nova.emergency.repository.NotificationRepository;
 import com.nova.emergency.repository.RiskPredictionRepository;
@@ -23,11 +25,17 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/alerts")
-@RequiredArgsConstructor
 public class AlertController {
 
     private final NotificationRepository notificationRepository;
     private final RiskPredictionRepository riskPredictionRepository;
+    private final IncidentRepository incidentRepository;
+
+    public AlertController(NotificationRepository notificationRepository, RiskPredictionRepository riskPredictionRepository, IncidentRepository incidentRepository) {
+        this.notificationRepository = notificationRepository;
+        this.riskPredictionRepository = riskPredictionRepository;
+        this.incidentRepository = incidentRepository;
+    }
 
     /**
      * Returns the most recent unread alerts for the top ticker.
@@ -37,6 +45,19 @@ public class AlertController {
     @GetMapping("/live")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getLiveAlerts() {
         List<Map<String, Object>> alerts = new ArrayList<>();
+
+        incidentRepository.findAll().stream()
+            .filter(i -> "critical".equalsIgnoreCase(i.getSeverity()) && !isClosed(i.getStatus()))
+            .forEach(i -> alerts.add(Map.of(
+                "id", i.getId() != null ? i.getId() : "",
+                "type", "critical_incident",
+                "title", i.getTitle() != null ? i.getTitle() : "Critical incident",
+                "message", i.getDescription() != null ? i.getDescription() : "Critical incident requires response",
+                "severity", "critical",
+                "incidentId", i.getId() != null ? i.getId() : "",
+                "trackingCode", i.getTrackingCode() != null ? i.getTrackingCode() : "",
+                "timestamp", i.getUpdatedAt() != null ? i.getUpdatedAt() : (i.getReportedAt() != null ? i.getReportedAt() : "")
+            )));
 
         // Recent unread notifications (last 20)
         List<Notification> notifications = notificationRepository.findByReadFalseOrderByCreatedAtDesc();
@@ -71,6 +92,10 @@ public class AlertController {
         });
 
         return ResponseEntity.ok(ApiResponse.ok(alerts.stream().limit(10).collect(Collectors.toList())));
+    }
+
+    private boolean isClosed(String status) {
+        return "resolved".equalsIgnoreCase(status) || "closed".equalsIgnoreCase(status) || "cancelled".equalsIgnoreCase(status);
     }
 
     private String buildRiskMessage(RiskPrediction rp) {

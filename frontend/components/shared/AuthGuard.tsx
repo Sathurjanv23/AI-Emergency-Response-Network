@@ -48,10 +48,14 @@ export function AuthGuard({ children, allowedRoles, redirectTo = '/login' }: Aut
           name: session.name,
           email: session.email,
           role: session.role,
+          status: session.status,
+          approvalStatus: session.approvalStatus,
+          rescueTeamId: session.rescueTeamId,
           language: session.language,
           createdAt: session.createdAt,
           lastActive: session.lastActive,
-          isActive: true,
+          isActive: session.isActive ?? true,
+          isVerified: session.isVerified ?? true,
         });
         user = session;
       }

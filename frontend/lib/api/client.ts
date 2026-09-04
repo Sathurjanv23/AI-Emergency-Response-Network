@@ -64,14 +64,48 @@ export const incidentsApi = {
 
   getById: (id: string) => apiFetch(`/incidents/${id}`),
 
+  getByTrackingCode: (code: string) => apiFetch(`/incidents/tracking/${encodeURIComponent(code)}`),
+
   create: (data: Record<string, unknown>) =>
     apiFetch('/incidents', { method: 'POST', body: JSON.stringify(data) }),
+
+  reportEmergency: async (formData: FormData) => {
+    const token = getAuthToken();
+    const url = `${API_BASE}/incidents/report`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: 'Failed to submit emergency report.' }));
+      throw new Error(error.message || `HTTP ${res.status}`);
+    }
+
+    const json = await res.json();
+    return json.data ?? json;
+  },
 
   update: (id: string, data: Record<string, unknown>) =>
     apiFetch(`/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
-  assignTeam: (incidentId: string, teamId: string) =>
-    apiFetch(`/incidents/${incidentId}/assign`, { method: 'POST', body: JSON.stringify({ teamId }) }),
+  assignTeam: (incidentId: string, teamId: string, teamName?: string) =>
+    apiFetch(`/incidents/${incidentId}/assign`, { method: 'POST', body: JSON.stringify({ teamId, teamName }) }),
+
+  acceptMission: (incidentId: string, teamId: string, teamName?: string, officerName?: string) =>
+    apiFetch(`/incidents/${incidentId}/accept`, { method: 'POST', body: JSON.stringify({ teamId, teamName, officerName }) }),
+
+  updateMissionStatus: (incidentId: string, status: string, teamId?: string, notes?: string) =>
+    apiFetch(`/incidents/${incidentId}/status`, { method: 'POST', body: JSON.stringify({ status, teamId, notes }) }),
+
+  acknowledge: (id: string, agency?: string, officerName?: string) =>
+    apiFetch(`/incidents/${id}/acknowledge`, { method: 'POST', body: JSON.stringify({ agency, officerName }) }),
+
+  cancel: (id: string, reason?: string) =>
+    apiFetch(`/incidents/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   escalate: (id: string, reason: string) =>
     apiFetch(`/incidents/${id}/escalate`, { method: 'POST', body: JSON.stringify({ reason }) }),
@@ -181,6 +215,10 @@ export const adminApi = {
     apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(data) }),
   updateUser: (id: string, data: Record<string, unknown>) =>
     apiFetch(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  approveUser: (id: string, decision: 'APPROVE' | 'REJECT', rescueTeamId?: string) =>
+    apiFetch(`/admin/users/${id}/approval`, {
+      method: 'POST', body: JSON.stringify({ decision, rescueTeamId }),
+    }),
   deleteUser: (id: string) =>
     apiFetch(`/admin/users/${id}`, { method: 'DELETE' }),
   getAuditLogs: () => apiFetch('/admin/audit-logs'),

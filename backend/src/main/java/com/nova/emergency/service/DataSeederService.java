@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,10 +19,10 @@ import java.util.UUID;
  * DataSeederService — Seeds all mock data from the original TypeScript mock into MongoDB on startup.
  * Set nova.seed.enabled=false in application.properties after first successful run.
  */
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class DataSeederService implements CommandLineRunner {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DataSeederService.class);
 
     private final UserRepository userRepository;
     private final IncidentRepository incidentRepository;
@@ -34,6 +35,23 @@ public class DataSeederService implements CommandLineRunner {
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
 
+    public DataSeederService(UserRepository userRepository, IncidentRepository incidentRepository,
+                             RescueTeamRepository rescueTeamRepository, HospitalRepository hospitalRepository,
+                             ResourceRepository resourceRepository, RiskPredictionRepository riskPredictionRepository,
+                             ShelterRepository shelterRepository, NotificationRepository notificationRepository,
+                             AuditLogRepository auditLogRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.incidentRepository = incidentRepository;
+        this.rescueTeamRepository = rescueTeamRepository;
+        this.hospitalRepository = hospitalRepository;
+        this.resourceRepository = resourceRepository;
+        this.riskPredictionRepository = riskPredictionRepository;
+        this.shelterRepository = shelterRepository;
+        this.notificationRepository = notificationRepository;
+        this.auditLogRepository = auditLogRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
     @Value("${nova.seed.enabled:true}")
     private boolean seedEnabled;
 
@@ -45,34 +63,66 @@ public class DataSeederService implements CommandLineRunner {
         }
 
         try {
-            long totalDocs = userRepository.count() + incidentRepository.count()
-                    + rescueTeamRepository.count() + hospitalRepository.count();
+            // ── One-time migration: ensure all users have approvalStatus=APPROVED ──
+            // Fixes users created before the auth role fix was applied.
+            userRepository.findAll().forEach(u -> {
+                boolean changed = false;
+                if (!"APPROVED".equalsIgnoreCase(u.getApprovalStatus())) {
+                    u.setApprovalStatus("APPROVED");
+                    changed = true;
+                }
+                if ("rescue_team".equals(u.getRole()) && u.getRescueTeamId() == null) {
+                    u.setRescueTeamId("RT-ALPHA-01");
+                    changed = true;
+                }
+                if (!u.isVerified()) {
+                    u.setVerified(true);
+                    changed = true;
+                }
+                if (!u.isActive()) {
+                    u.setActive(true);
+                    u.setStatus("ACTIVE");
+                    changed = true;
+                }
+                if (changed) {
+                    userRepository.save(u);
+                }
+            });
 
-            if (totalDocs > 0) {
-                log.info("Database already has data ({} documents). Skipping seed.", totalDocs);
-                return;
+            if (userRepository.findByEmail("rescue@nova.lk").isEmpty()) {
+                log.info("Seeding essential users...");
+                seedUsers();
+            }
+            seedRescueTeams();
+            List.of("citizen@nova.lk", "officer@nova.lk", "rescue@nova.lk", "hospital@nova.lk", "admin@nova.lk")
+                .forEach(email -> userRepository.findByEmail(email).ifPresent(user -> {
+                    user.setApprovalStatus("APPROVED");
+                    if ("rescue@nova.lk".equals(email)) user.setRescueTeamId("RT-ALPHA-01");
+                    user.setStatus("ACTIVE");
+                    userRepository.save(user);
+                }));
+            seedHospitals();
+            if (incidentRepository.count() == 0) {
+                seedIncidents();
+            }
+            seedResources();
+            if (riskPredictionRepository.count() == 0) {
+                seedRiskPredictions();
+            }
+            if (shelterRepository.count() == 0) {
+                seedShelters();
+            }
+            seedNotifications();
+            seedIncidentAlerts();
+            if (auditLogRepository.count() == 0) {
+                seedAuditLogs();
             }
 
-            log.info("=== PROJECT NOVA: Seeding initial data into MongoDB Atlas ===");
-
-            seedUsers();
-            seedIncidents();
-            seedRescueTeams();
-            seedHospitals();
-            seedResources();
-            seedRiskPredictions();
-            seedShelters();
-            seedNotifications();
-            seedAuditLogs();
-
-            log.info("=== Seeding complete! All collections populated. ===");
+            log.info("=== Seeding check complete. ===");
 
         } catch (Exception e) {
             log.error("=== NOVA: Could not connect to MongoDB Atlas. App will still run. ===");
             log.error(">>> Cause: {}", e.getMessage());
-            log.error(">>> ACTION REQUIRED: Add your IP address to MongoDB Atlas Network Access.");
-            log.error(">>> Your IP: Check https://api.ipify.org — then add it at:");
-            log.error(">>> https://cloud.mongodb.com -> Network Access -> Add IP Address");
         }
     }
 
@@ -91,8 +141,14 @@ public class DataSeederService implements CommandLineRunner {
             makeUser("u006", "Muthu Selvam",          "muthu@nova.lk",    demoPassword, "citizen",     "+94774567890", "Jaffna",   null,                             "ta", now)
         );
 
-        userRepository.saveAll(users);
-        log.info("Seeded {} users", users.size());
+        int count = 0;
+        for (User u : users) {
+            if (userRepository.findByEmail(u.getEmail().toLowerCase().trim()).isEmpty()) {
+                userRepository.save(u);
+                count++;
+            }
+        }
+        log.info("Seeded {} new demo users", count);
     }
 
     private User makeUser(String id, String name, String email, String hash, String role,
@@ -103,6 +159,11 @@ public class DataSeederService implements CommandLineRunner {
         u.setEmail(email);
         u.setPasswordHash(hash);
         u.setRole(role);
+        u.setApprovalStatus("citizen".equals(role) ? "APPROVED" : "PENDING_APPROVAL");
+        if ("rescue_team".equals(role)) {
+            u.setRescueTeamId("RT-ALPHA-01");
+            u.setApprovalStatus("APPROVED");
+        }
         u.setPhone(phone);
         u.setDistrict(district);
         u.setOrganization(org);
@@ -148,7 +209,7 @@ public class DataSeederService implements CommandLineRunner {
                 7.2906, 80.6337, "A9 Highway km 78, Kandy", "Kandy", "Zone 07",
                 "u001", "Road User", t20m, t10m, 12, "RT-BETA-03", "Team Echo", 15, 3),
 
-            makeIncident("NOV-1041", "medical", "high", "en_route",
+            makeIncident("NOV-1041", "medical", "high", "dispatched",
                 "Medical emergency — suspected cardiac arrest",
                 "Elderly male, 68 years old, suspected cardiac arrest. Bystanders performing CPR.",
                 6.9271, 79.8612, "Pettah Market, Colombo 11", "Colombo", "Zone 01",
@@ -180,6 +241,7 @@ public class DataSeederService implements CommandLineRunner {
                                   Integer eta, Integer priority) {
         Incident inc = new Incident();
         inc.setId(id);
+        inc.setTrackingCode(id);
         inc.setType(type);
         inc.setSeverity(severity);
         inc.setStatus(status);
@@ -197,13 +259,16 @@ public class DataSeederService implements CommandLineRunner {
         inc.setUpdatedAt(updatedAt);
         inc.setPeopleAffected(peopleAffected);
         inc.setAssignedTeam(assignedTeam);
+        inc.setAssignedTeamId(assignedTeam);
         inc.setAssignedTeamName(assignedTeamName);
         inc.setEta(eta);
         inc.setPriority(priority);
-        inc.setNotes(List.of());
-        inc.setAttachments(List.of());
-        inc.setUpdates(List.of(new Incident.IncidentUpdate("upd-" + id, status, "Status: " + status, "System", reportedAt, false)));
-        inc.setResourcesAllocated(List.of());
+        inc.setNotes(new ArrayList<>());
+        inc.setAttachments(new ArrayList<>());
+        List<Incident.IncidentUpdate> updates = new ArrayList<>();
+        updates.add(new Incident.IncidentUpdate("upd-" + id, status, "Status: " + status, "System", reportedAt, false));
+        inc.setUpdates(updates);
+        inc.setResourcesAllocated(new ArrayList<>());
         return inc;
     }
 
@@ -239,8 +304,11 @@ public class DataSeederService implements CommandLineRunner {
                 List.of("Coastal Rescue", "Medical"))
         );
 
-        rescueTeamRepository.saveAll(teams);
-        log.info("Seeded {} rescue teams", teams.size());
+        List<RescueTeam> missing = teams.stream()
+            .filter(team -> rescueTeamRepository.findById(team.getId()).isEmpty())
+            .toList();
+        rescueTeamRepository.saveAll(missing);
+        log.info("Seeded {} missing rescue teams", missing.size());
     }
 
     private RescueTeam makeTeam(String id, String name, String code, String status,
@@ -269,32 +337,68 @@ public class DataSeederService implements CommandLineRunner {
             makeHospital("h001", "National Hospital Sri Lanka", "teaching",
                 6.9271, 79.8660, "Regent Street, Colombo 10", "Colombo", "+94112691111",
                 3200, 47, 80, 8, 6,
-                List.of("Trauma", "Cardiac", "Neurology", "Burns"), now),
+                List.of("Trauma", "Cardiac", "Neurology", "Burns"), now,
+                List.of(
+                    new Hospital.AmbulanceUnit("amb-h001-1", "NHSL-AMB-01", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h001-2", "NHSL-AMB-02", "dispatched", 8, "NOV-1041"),
+                    new Hospital.AmbulanceUnit("amb-h001-3", "NHSL-AMB-03", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h001-4", "NHSL-AMB-04", "dispatched", 12, "NOV-1039"),
+                    new Hospital.AmbulanceUnit("amb-h001-5", "NHSL-AMB-05", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h001-6", "NHSL-AMB-06", "maintenance", null, null)
+                ),
+                List.of(
+                    new Hospital.IncomingCase("ic001", "NOV-1041", "critical", 4, 1,
+                        "Suspected cardiac arrest — elderly male", List.of("Cardiac", "ICU"), "amb-h001-2"),
+                    new Hospital.IncomingCase("ic002", "NOV-1039", "high", 12, 2,
+                        "Flood trauma — multiple injuries", List.of("Trauma", "Surgery"), "amb-h001-4")
+                )),
 
             makeHospital("h002", "Colombo South Teaching Hospital", "teaching",
                 6.8765, 79.8601, "Hospital Road, Kalubowila", "Colombo", "+94112510555",
                 1800, 123, 40, 12, 4,
-                List.of("Emergency Medicine", "Surgery", "Orthopedics"), now),
+                List.of("Emergency Medicine", "Surgery", "Orthopedics"), now,
+                List.of(
+                    new Hospital.AmbulanceUnit("amb-h002-1", "CSTH-AMB-01", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h002-2", "CSTH-AMB-02", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h002-3", "CSTH-AMB-03", "dispatched", 15, "NOV-1042")
+                ),
+                List.of(
+                    new Hospital.IncomingCase("ic003", "NOV-1042", "critical", 8, 1,
+                        "Flood rescue — elderly trapped", List.of("Emergency", "Trauma"), "amb-h002-3")
+                )),
 
             makeHospital("h003", "Kelaniya Teaching Hospital", "teaching",
                 6.9559, 79.9209, "Kelaniya", "Gampaha", "+94112910000",
                 900, 34, 20, 2, 3,
-                List.of("Emergency", "Obstetrics", "Pediatrics"), now),
+                List.of("Emergency", "Obstetrics", "Pediatrics"), now,
+                List.of(
+                    new Hospital.AmbulanceUnit("amb-h003-1", "KTH-AMB-01", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h003-2", "KTH-AMB-02", "dispatched", 6, "NOV-1039")
+                ),
+                List.of()),
 
             makeHospital("h004", "Kandy General Hospital", "general",
                 7.2906, 80.6337, "William Gopallawa Mawatha, Kandy", "Kandy", "+94812222261",
                 1200, 89, 30, 7, 3,
-                List.of("General Surgery", "Emergency", "Orthopedics"), now)
+                List.of("General Surgery", "Emergency", "Orthopedics"), now,
+                List.of(
+                    new Hospital.AmbulanceUnit("amb-h004-1", "KGH-AMB-01", "available", null, null),
+                    new Hospital.AmbulanceUnit("amb-h004-2", "KGH-AMB-02", "available", null, null)
+                ),
+                List.of())
         );
 
+        // Always upsert hospitals so ambulance/case data is refreshed on restart
         hospitalRepository.saveAll(hospitals);
-        log.info("Seeded {} hospitals", hospitals.size());
+        log.info("Upserted {} hospitals with ambulance fleet data", hospitals.size());
     }
 
     private Hospital makeHospital(String id, String name, String type,
                                   double lat, double lng, String address, String district, String contact,
                                   int totalBeds, int availableBeds, int icuTotal, int icuAvailable,
-                                  int emergencyTeams, List<String> specializations, String lastUpdated) {
+                                  int emergencyTeams, List<String> specializations, String lastUpdated,
+                                  List<Hospital.AmbulanceUnit> ambulances,
+                                  List<Hospital.IncomingCase> incomingCases) {
         Hospital h = new Hospital();
         h.setId(id); h.setName(name); h.setType(type); h.setDistrict(district); h.setContact(contact);
         Hospital.GeoLocation loc = new Hospital.GeoLocation();
@@ -304,7 +408,8 @@ public class DataSeederService implements CommandLineRunner {
         h.setIcuTotal(icuTotal); h.setIcuAvailable(icuAvailable);
         h.setEmergencyTeams(emergencyTeams);
         h.setSpecializations(specializations);
-        h.setAmbulances(List.of()); h.setIncomingCases(List.of());
+        h.setAmbulances(ambulances != null ? ambulances : List.of());
+        h.setIncomingCases(incomingCases != null ? incomingCases : List.of());
         h.setActive(true); h.setLastUpdated(lastUpdated);
         return h;
     }
@@ -326,8 +431,11 @@ public class DataSeederService implements CommandLineRunner {
             makeResource("r008", "rescue_personnel",  "Trained Rescue Personnel",     280,165,0,  115,"available", depot, "2024-01-01", "personnel", 30)
         );
 
-        resourceRepository.saveAll(resources);
-        log.info("Seeded {} resources", resources.size());
+        List<Resource> missing = resources.stream()
+            .filter(resource -> resourceRepository.findById(resource.getId()).isEmpty())
+            .toList();
+        resourceRepository.saveAll(missing);
+        log.info("Seeded {} missing resources", missing.size());
     }
 
     private Resource makeResource(String id, String type, String name, int qty, int avail, int reserved,
@@ -335,6 +443,7 @@ public class DataSeederService implements CommandLineRunner {
                                   String unit, int threshold) {
         Resource r = new Resource();
         r.setId(id); r.setType(type); r.setName(name); r.setQuantity(qty);
+        r.setCategory(type);
         r.setAvailable(avail); r.setReserved(reserved); r.setDeployed(deployed);
         r.setStatus(status); r.setLocation(loc); r.setLastRestocked(lastRestocked);
         r.setUnit(unit); r.setLowStockThreshold(threshold);
@@ -432,9 +541,32 @@ public class DataSeederService implements CommandLineRunner {
                 "Meteorological Department issues red alert for Western Province.", "high", false, t, null, null)
         );
 
-        notificationRepository.saveAll(notifs);
-        log.info("Seeded {} notifications", notifs.size());
+        List<Notification> missing = notifs.stream()
+            .filter(notification -> notificationRepository.findById(notification.getId()).isEmpty())
+            .toList();
+        notificationRepository.saveAll(missing);
+        log.info("Seeded {} missing notifications", missing.size());
     }
+
+        private void seedIncidentAlerts() {
+        List<Notification> existing = notificationRepository.findAll();
+        List<Notification> missing = incidentRepository.findAll().stream()
+            .filter(incident -> "critical".equalsIgnoreCase(incident.getSeverity()))
+            .filter(incident -> existing.stream().noneMatch(notification -> incident.getId().equals(notification.getRelatedId())))
+            .map(incident -> makeNotif(
+                "alert-" + incident.getId(),
+                "critical_incident",
+                "Critical incident: " + incident.getId(),
+                incident.getTitle() != null ? incident.getTitle() : "Critical incident requires response",
+                "critical",
+                false,
+                incident.getUpdatedAt() != null ? incident.getUpdatedAt() : incident.getReportedAt(),
+                incident.getId(),
+                "incident"))
+            .toList();
+        notificationRepository.saveAll(missing);
+        log.info("Seeded {} missing incident alerts", missing.size());
+        }
 
     private Notification makeNotif(String id, String type, String title, String message,
                                    String severity, boolean read, String createdAt,

@@ -24,10 +24,11 @@ import java.util.List;
  *   - alert            : live system alert
  *   - heartbeat        : keep-alive ping (every 30s)
  */
-@Slf4j
 @RestController
 @RequestMapping("/api/events")
 public class SseController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SseController.class);
 
     private static final long SSE_TIMEOUT_MS = 5 * 60 * 1000L; // 5 minutes
 

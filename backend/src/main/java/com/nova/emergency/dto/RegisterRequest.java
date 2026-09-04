@@ -30,4 +30,23 @@ public class RegisterRequest {
 
     // en | ta | si
     private String language = "en";
+
+    public RegisterRequest() {}
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getDistrict() { return district; }
+    public void setDistrict(String district) { this.district = district; }
+    public String getOrganization() { return organization; }
+    public void setOrganization(String organization) { this.organization = organization; }
+    public String getLanguage() { return language; }
+    public void setLanguage(String language) { this.language = language; }
 }

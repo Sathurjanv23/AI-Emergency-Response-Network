@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNovaStore } from '@/lib/store/nova-store';
@@ -91,7 +91,7 @@ function AuthCallbackContent() {
   // Ref to prevent React StrictMode double execution
   const hasExchangedRef = useRef<string | null>(null);
 
-  const handleSuccessfulAuth = (user: AuthUser, isNew: boolean) => {
+  const handleSuccessfulAuth = useCallback((user: AuthUser, isNew: boolean) => {
     login({
       id: user.id,
       name: user.name,
@@ -101,6 +101,8 @@ function AuthCallbackContent() {
       createdAt: user.createdAt,
       lastActive: user.lastActive,
       isActive: user.isActive,
+      rescueTeamId: user.rescueTeamId,
+      approvalStatus: user.approvalStatus,
     });
 
     if (isNew) {
@@ -121,7 +123,7 @@ function AuthCallbackContent() {
 
     const destination = ROLE_HREF[user.role] || '/command';
     router.replace(destination);
-  };
+  }, [login, router]);
 
   useEffect(() => {
     const code = searchParams.get('code');
@@ -160,7 +162,7 @@ function AuthCallbackContent() {
       setErrorMessage('Invalid authentication callback. Please sign in again.');
       setTimeout(() => router.replace('/login'), 2000);
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, handleSuccessfulAuth]);
 
   const handleCompleteRegistration = async (e: React.FormEvent) => {
     e.preventDefault();

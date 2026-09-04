@@ -65,17 +65,38 @@ export function EmergencyCard({ incident, onClick, variant = 'feed', href }: Eme
         </div>
       </div>
 
-      {/* Location & Time */}
-      <div className="flex items-center gap-3 mb-2.5 text-xs text-nova-text-dim">
-        <span className="flex items-center gap-1">
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          {localize(incident.location.district)} {incident.location.zone && `· ${localize(incident.location.zone)}`}
-        </span>
-        <span>·</span>
-        <span>{timeAgo(incident.reportedAt)}</span>
+      {/* Location, Time & Evidence Badges */}
+      <div className="flex items-center justify-between gap-2 mb-2.5 text-xs text-nova-text-dim">
+        <div className="flex items-center gap-2 truncate">
+          <span className="flex items-center gap-1">
+            <svg className="w-3 h-3 text-nova-cyan flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className="truncate">{localize(incident.location?.district || 'GPS')} {incident.location?.zone && `· ${localize(incident.location.zone)}`}</span>
+          </span>
+          <span>·</span>
+          <span>{timeAgo(incident.reportedAt)}</span>
+        </div>
+
+        {/* Evidence Badges */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {incident.audioUrl && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-nova-cyan/15 text-nova-cyan font-mono" title="Voice recording attached">
+              🎙️ Voice
+            </span>
+          )}
+          {incident.photoUrls && incident.photoUrls.length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 font-mono" title="Photo evidence attached">
+              📷 Photo
+            </span>
+          )}
+          {incident.isSilentSos && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold" title="Silent SOS mode">
+              🤫 Silent
+            </span>
+          )}
+        </div>
       </div>
 
       {/* AI Analysis Row */}

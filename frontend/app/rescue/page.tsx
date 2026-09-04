@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { AuthGuard } from '@/components/shared/AuthGuard';
@@ -7,30 +8,53 @@ import { useNovaStore } from '@/lib/store/nova-store';
 import { StatCard } from '@/components/emergency/StatCard';
 import { SeverityBadge } from '@/components/emergency/SeverityBadge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, Navigation, Users, Package, CheckCircle, Radio, MapPin, Clock, Zap } from 'lucide-react';
+import { Activity, Navigation, Users, Package, CheckCircle, Radio, MapPin, Clock, Zap, ShieldAlert, RefreshCw } from 'lucide-react';
 import { cn, getTeamStatusColor, formatTimeAgo } from '@/lib/utils';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import type { RescueTeam } from '@/types';
 
 import { useTranslation } from '@/lib/i18n';
 
 export default function RescueDashboardPage() {
-  const { rescueTeams, incidents, updateTeam, updateIncident } = useNovaStore();
+  const { rescueTeams, incidents, updateMissionStatus, currentUser, fetchTeams, loading, errors } = useNovaStore();
   const { t, localize, statusLabel } = useTranslation();
-  const myTeam = rescueTeams.find((t) => t.id === 'RT-ALPHA-02') || rescueTeams[0];
 
-  if (!myTeam) {
+  const myTeam = useMemo<RescueTeam | null>(() => {
+    if (currentUser?.rescueTeamId) {
+      return (
+        rescueTeams.find(
+          (team) => team.id === currentUser.rescueTeamId
+        ) ?? null
+      );
+    }
+
+    return null;
+  }, [rescueTeams, currentUser?.rescueTeamId]);
+
+  const assignedIncident = incidents.find(
+    (i) => (i.id === myTeam?.currentIncident || i.assignedTeamId === myTeam?.id || i.assignedTeam === myTeam?.id) &&
+           (i.status !== 'resolved' && i.status !== 'closed' && i.status !== 'cancelled')
+  );
+
+  const handleStatusChange = async (status: 'available' | 'en_route' | 'on_scene') => {
+    if (!myTeam) return;
+    if (assignedIncident) {
+      await updateMissionStatus(assignedIncident.id, status, myTeam.id);
+    }
+    toast.success(`Status updated: ${statusLabel(status)}`);
+  };
+
+  if (!currentUser || loading.teams || (Boolean(currentUser.rescueTeamId) && loading.incidents)) {
     return (
       <AuthGuard allowedRoles={['rescue_team']}>
         <div className="min-h-screen bg-nova-bg">
           <TopNav role="rescue_team" />
           <DashboardShell role="rescue_team">
-            <div className="p-12 text-center space-y-3">
-              <Navigation className="w-12 h-12 text-nova-text-muted mx-auto opacity-40" />
-              <h2 className="text-lg font-bold text-nova-text">No rescue teams currently registered</h2>
-              <p className="text-xs text-nova-text-dim max-w-md mx-auto">
-                No active rescue team profile is assigned or registered in the database. Deployed squads and active incident assignments will appear here in real time.
-              </p>
+            <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
+              <RefreshCw className="w-8 h-8 text-nova-cyan animate-spin" />
+              <h3 className="text-base font-bold text-nova-text">Loading Squad Operations...</h3>
+              <p className="text-xs text-nova-text-muted">Fetching rescue teams and live dispatch queues...</p>
             </div>
           </DashboardShell>
         </div>
@@ -38,15 +62,61 @@ export default function RescueDashboardPage() {
     );
   }
 
-  const assignedIncident = incidents.find((i) => i.id === myTeam.currentIncident);
+  if (errors.teams || (myTeam && errors.incidents)) {
+    return (
+      <AuthGuard allowedRoles={['rescue_team']}>
+        <div className="min-h-screen bg-nova-bg"><TopNav role="rescue_team" /><DashboardShell role="rescue_team"><div className="p-12 text-center"><ShieldAlert className="w-8 h-8 text-red-400 mx-auto mb-3" /><h3 className="text-base font-bold text-nova-text">Unable to load rescue operations</h3><p className="text-xs text-red-300 mt-2">{errors.teams || errors.incidents}</p><button type="button" onClick={() => { fetchTeams(); }} className="mt-4 px-4 py-2 bg-nova-surface text-nova-text border border-nova-border rounded-xl text-xs"><RefreshCw className="w-3.5 h-3.5 inline mr-1.5" /> Retry</button></div></DashboardShell></div>
+      </AuthGuard>
+    );
+  }
 
-  const handleStatusChange = (status: 'available' | 'en_route' | 'on_scene') => {
-    updateTeam(myTeam.id, { status });
-    if (status === 'on_scene' && myTeam.currentIncident) {
-      updateIncident(myTeam.currentIncident, { status: 'responding' });
-    }
-    toast.success(`Status updated: ${statusLabel(status)}`);
-  };
+  if (currentUser.approvalStatus !== 'APPROVED') {
+    return <AuthGuard allowedRoles={['rescue_team']}><div className="min-h-screen bg-nova-bg"><TopNav role="rescue_team" /><DashboardShell role="rescue_team"><div className="p-12 text-center"><ShieldAlert className="w-8 h-8 text-amber-400 mx-auto mb-3" /><h3 className="text-base font-bold text-nova-text">Approval Pending</h3><p className="text-xs text-nova-text-muted mt-2">Your rescue role is awaiting administrator approval.</p></div></DashboardShell></div></AuthGuard>;
+  }
+
+  if (currentUser.rescueTeamId && !myTeam) {
+    return <AuthGuard allowedRoles={['rescue_team']}><div className="min-h-screen bg-nova-bg"><TopNav role="rescue_team" /><DashboardShell role="rescue_team"><div className="p-12 text-center"><ShieldAlert className="w-8 h-8 text-red-400 mx-auto mb-3" /><h3 className="text-base font-bold text-nova-text">Linked rescue team unavailable</h3><p className="text-xs text-red-300 mt-2">The assigned team {currentUser.rescueTeamId} could not be loaded.</p></div></DashboardShell></div></AuthGuard>;
+  }
+
+  if (!myTeam) {
+    return (
+      <AuthGuard allowedRoles={['rescue_team']}>
+        <div className="min-h-screen bg-nova-bg">
+          <TopNav role="rescue_team" />
+          <DashboardShell role="rescue_team">
+            <div className="p-6">
+              <div className="nova-card border border-amber-500/30 bg-amber-500/5 rounded-2xl p-8 text-center max-w-lg mx-auto space-y-4 my-8">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                  <ShieldAlert className="w-7 h-7" />
+                </div>
+                <h3 className="text-lg font-bold text-nova-text">
+                  No Rescue Team Linked
+                </h3>
+                <p className="text-xs text-nova-text-dim leading-relaxed">
+                  {`No rescue team is linked to this account (${currentUser.email}). Please contact your dispatch administrator to link your responder credentials to an active squad.`}
+                </p>
+                <div className="flex justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchTeams()}
+                    className="px-4 py-2 bg-nova-surface hover:bg-nova-surface2 text-nova-text border border-nova-border font-semibold rounded-xl text-xs transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry Connection
+                  </button>
+                  <Link
+                    href="/"
+                    className="px-4 py-2 bg-nova-cyan hover:bg-nova-cyan-dim text-nova-bg font-bold rounded-xl text-xs transition-all inline-block"
+                  >
+                    Return to Home
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </DashboardShell>
+        </div>
+      </AuthGuard>
+    );
+  }
 
   return (
     <AuthGuard allowedRoles={['rescue_team']}>

@@ -13,13 +13,20 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/analytics")
-@RequiredArgsConstructor
 public class AnalyticsController {
 
     private final IncidentRepository incidentRepository;
     private final RescueTeamRepository rescueTeamRepository;
     private final ResourceRepository resourceRepository;
     private final HospitalRepository hospitalRepository;
+
+    public AnalyticsController(IncidentRepository incidentRepository, RescueTeamRepository rescueTeamRepository,
+                               ResourceRepository resourceRepository, HospitalRepository hospitalRepository) {
+        this.incidentRepository = incidentRepository;
+        this.rescueTeamRepository = rescueTeamRepository;
+        this.resourceRepository = resourceRepository;
+        this.hospitalRepository = hospitalRepository;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSummary(
@@ -45,10 +52,12 @@ public class AnalyticsController {
         summary.put("totalIncidents", total);
         summary.put("criticalIncidents", critical);
         summary.put("resolvedIncidents", resolved);
-        summary.put("avgResponseTime", 11.4);
+        double avgResponseTime = allIncidents.stream().filter(i -> i.getEta() != null)
+            .mapToInt(Incident::getEta).average().orElse(0);
+        summary.put("avgResponseTime", avgResponseTime);
         summary.put("peopleAssisted", peopleAssisted);
         summary.put("resourcesDeployed", resourceRepository.findAll().stream().mapToLong(r -> r.getDeployed()).sum());
-        summary.put("predictionAccuracy", 87.3);
+        summary.put("predictionAccuracy", null);
         summary.put("resolutionRate", total > 0 ? (double) resolved / total * 100 : 0);
         summary.put("teamsDeployed", teamsDeployed);
         summary.put("incidentsByType", byType);
@@ -59,14 +68,19 @@ public class AnalyticsController {
     @GetMapping("/incidents/trends")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getIncidentTrends() {
         Map<String, Object> trends = new HashMap<>();
-        trends.put("data", List.of());
+        trends.put("data", incidentRepository.findAll().stream().map(i -> Map.of(
+            "date", i.getReportedAt() != null ? i.getReportedAt() : "",
+            "status", i.getStatus() != null ? i.getStatus() : "",
+            "severity", i.getSeverity() != null ? i.getSeverity() : ""
+        )).toList());
         return ResponseEntity.ok(ApiResponse.ok(trends));
     }
 
     @GetMapping("/response-times")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getResponseTimes() {
         Map<String, Object> data = new HashMap<>();
-        data.put("avgResponseTime", 11.4);
+        data.put("avgResponseTime", incidentRepository.findAll().stream().filter(i -> i.getEta() != null)
+            .mapToInt(Incident::getEta).average().orElse(0));
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
 

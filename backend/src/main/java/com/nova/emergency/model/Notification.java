@@ -32,4 +32,25 @@ public class Notification {
 
     // Target roles for filtering: citizen | officer | rescue_team | hospital | admin
     private List<String> targetRole;
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public String getSeverity() { return severity; }
+    public void setSeverity(String severity) { this.severity = severity; }
+    public boolean isRead() { return read; }
+    public void setRead(boolean read) { this.read = read; }
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+    public String getRelatedId() { return relatedId; }
+    public void setRelatedId(String relatedId) { this.relatedId = relatedId; }
+    public String getRelatedType() { return relatedType; }
+    public void setRelatedType(String relatedType) { this.relatedType = relatedType; }
+    public List<String> getTargetRole() { return targetRole; }
+    public void setTargetRole(List<String> targetRole) { this.targetRole = targetRole; }
 }

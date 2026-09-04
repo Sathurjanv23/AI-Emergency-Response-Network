@@ -12,10 +12,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/notifications")
-@RequiredArgsConstructor
 public class NotificationController {
 
     private final NotificationRepository notificationRepository;
+
+    public NotificationController(NotificationRepository notificationRepository) {
+        this.notificationRepository = notificationRepository;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Notification>>> getAll() {

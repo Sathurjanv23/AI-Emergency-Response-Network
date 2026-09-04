@@ -10,9 +10,10 @@ import {
   Settings, ClipboardList, HeartPulse, Package, Radio, UserCheck,
   Navigation, Waves, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { UserRole } from '@/types';
 import { useTranslation } from '@/lib/i18n';
+import { useNovaStore } from '@/lib/store/nova-store';
 
 interface NavItem {
   href: string;
@@ -27,9 +28,14 @@ interface NavSection {
   items: NavItem[];
 }
 
-// ─── Navigation Definitions ──────────────────────────────────
+interface BadgeCounts {
+  officerIncidents: number;
+  officerAlerts: number;
+  rescueIncidents: number;
+  hospitalEmergencies: number;
+}
 
-function getNavSections(role: UserRole): NavSection[] {
+function getNavSections(role: UserRole, badges: BadgeCounts): NavSection[] {
   switch (role) {
     case 'officer':
       return [
@@ -38,7 +44,13 @@ function getNavSections(role: UserRole): NavSection[] {
           items: [
             { href: '/command', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
             { href: '/command/map', label: 'Live Map', icon: <Map className="w-4 h-4" /> },
-            { href: '/command/incidents', label: 'Incidents', icon: <AlertTriangle className="w-4 h-4" />, badge: 5, badgeVariant: 'critical' },
+            {
+              href: '/command/incidents',
+              label: 'Incidents',
+              icon: <AlertTriangle className="w-4 h-4" />,
+              badge: badges.officerIncidents > 0 ? badges.officerIncidents : undefined,
+              badgeVariant: 'critical',
+            },
             { href: '/command/ai-analysis', label: 'AI Analysis', icon: <Brain className="w-4 h-4" /> },
           ],
         },
@@ -55,7 +67,13 @@ function getNavSections(role: UserRole): NavSection[] {
           title: 'Intelligence',
           items: [
             { href: '/command/copilot', label: 'NOVA Copilot', icon: <Cpu className="w-4 h-4" /> },
-            { href: '/command/alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: 3, badgeVariant: 'critical' },
+            {
+              href: '/command/alerts',
+              label: 'Alerts',
+              icon: <Bell className="w-4 h-4" />,
+              badge: badges.officerAlerts > 0 ? badges.officerAlerts : undefined,
+              badgeVariant: 'critical',
+            },
             { href: '/command/analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
           ],
         },
@@ -79,7 +97,13 @@ function getNavSections(role: UserRole): NavSection[] {
         {
           items: [
             { href: '/rescue', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-            { href: '/rescue/incidents', label: 'Assigned Incidents', icon: <AlertTriangle className="w-4 h-4" />, badge: 2, badgeVariant: 'critical' },
+            {
+              href: '/rescue/incidents',
+              label: 'Assigned Incidents',
+              icon: <AlertTriangle className="w-4 h-4" />,
+              badge: badges.rescueIncidents > 0 ? badges.rescueIncidents : undefined,
+              badgeVariant: 'critical',
+            },
             { href: '/rescue/navigation', label: 'Navigation', icon: <Navigation className="w-4 h-4" /> },
             { href: '/rescue/team', label: 'Team Status', icon: <Users className="w-4 h-4" /> },
           ],
@@ -91,7 +115,13 @@ function getNavSections(role: UserRole): NavSection[] {
         {
           items: [
             { href: '/hospital', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-            { href: '/hospital/emergencies', label: 'Incoming', icon: <AlertTriangle className="w-4 h-4" />, badge: 2, badgeVariant: 'critical' },
+            {
+              href: '/hospital/emergencies',
+              label: 'Incoming',
+              icon: <AlertTriangle className="w-4 h-4" />,
+              badge: badges.hospitalEmergencies > 0 ? badges.hospitalEmergencies : undefined,
+              badgeVariant: 'critical',
+            },
             { href: '/hospital/triage', label: 'Triage Queue', icon: <ClipboardList className="w-4 h-4" /> },
             { href: '/hospital/capacity', label: 'Capacity', icon: <Activity className="w-4 h-4" /> },
             { href: '/hospital/ambulances', label: 'Ambulances', icon: <Truck className="w-4 h-4" /> },
@@ -136,7 +166,39 @@ interface SidebarProps {
 export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useTranslation();
-  const rawSections = getNavSections(role);
+  const { incidents, notifications, unreadCount, rescueTeams } = useNovaStore();
+
+  const badges: BadgeCounts = useMemo(() => {
+    const officerIncidents = incidents.filter(
+      (i) => i.status !== 'resolved' && i.status !== 'closed' && i.status !== 'cancelled'
+    ).length;
+    const officerAlerts = unreadCount || notifications.filter((n) => !n.read).length;
+
+    const myTeam = rescueTeams.find((t) => t.id === 'RT-ALPHA-02') || rescueTeams[0];
+    const rescueIncidents = incidents.filter((i) => {
+      if (i.status === 'resolved' || i.status === 'closed' || i.status === 'cancelled') return false;
+      const isAssignedToMe = i.assignedTeamId === myTeam?.id || i.assignedTeam === myTeam?.id;
+      const isAvailableForRescue =
+        !i.assignedTeamId &&
+        (i.recommendedAgencies?.includes('search_rescue') ||
+          i.recommendedAgencies?.includes('fire_rescue') ||
+          i.recommendedAgencies?.includes('disaster_response') ||
+          ['flood', 'landslide', 'fire', 'building_collapse', 'road_accident', 'unknown'].includes(i.type));
+      return isAssignedToMe || isAvailableForRescue;
+    }).length;
+
+    const hospitalEmergencies = incidents.filter(
+      (i) =>
+        (i.type === 'medical' || i.type === 'road_accident' || i.type === 'building_collapse' || i.type === 'fire') &&
+        i.status !== 'resolved' &&
+        i.status !== 'closed' &&
+        i.status !== 'cancelled'
+    ).length;
+
+    return { officerIncidents, officerAlerts, rescueIncidents, hospitalEmergencies };
+  }, [incidents, notifications, unreadCount, rescueTeams]);
+
+  const rawSections = getNavSections(role, badges);
 
   const getTranslationKey = (label: string) => {
     const map: Record<string, string> = {

@@ -19,12 +19,16 @@ import java.nio.charset.StandardCharsets;
  * GoogleOAuthService — Handles Google OAuth2 authorization code flow.
  * Supports both direct backend callback and frontend callback proxying.
  */
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class GoogleOAuthService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GoogleOAuthService.class);
+
     private final AuthService authService;
+
+    public GoogleOAuthService(AuthService authService) {
+        this.authService = authService;
+    }
 
     @Value("${spring.security.oauth2.client.registration.google.client-id:NOT_SET}")
     private String clientId;

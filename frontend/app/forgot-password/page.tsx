@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { NovaLogo } from '@/components/shared/TopNav';
 import {
   Mail, ArrowLeft, CheckCircle, XCircle, Loader2, KeyRound, ShieldCheck,
@@ -14,6 +15,7 @@ import { toast } from 'sonner';
 type Step = 'request' | 'sent' | 'demo-reset';
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>('request');
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -32,10 +34,11 @@ export default function ForgotPasswordPage() {
     setLoading(false);
 
     if (result.success) {
-      setSentEmail(email);
-      if (result.demoToken) setDemoToken(result.demoToken);
-      setStep('sent');
-      toast.success('Reset link sent!', { description: result.message });
+      toast.success('Verification code sent!', { description: result.message });
+      router.push(`/reset-password?email=${encodeURIComponent(email)}`);
+    } else {
+      setEmailError(result.message);
+      toast.error('Request failed', { description: result.message });
     }
   };
 

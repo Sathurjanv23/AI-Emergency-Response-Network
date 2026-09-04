@@ -12,10 +12,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/resources")
-@RequiredArgsConstructor
 public class ResourceController {
 
     private final ResourceService resourceService;
+
+    public ResourceController(ResourceService resourceService) {
+        this.resourceService = resourceService;
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Resource>>> getAll() {
