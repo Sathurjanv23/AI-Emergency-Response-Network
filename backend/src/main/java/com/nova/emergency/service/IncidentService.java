@@ -13,17 +13,9 @@ import com.nova.emergency.repository.HospitalRepository;
 import com.nova.emergency.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.*;
 
@@ -37,18 +29,19 @@ public class IncidentService {
     private final HospitalRepository hospitalRepository;
     private final AuditLogRepository auditLogRepository;
     private final com.nova.emergency.repository.NotificationRepository notificationRepository;
+    private final GridFsStorageService gridFsStorageService;
 
     public IncidentService(IncidentRepository incidentRepository, RescueTeamRepository rescueTeamRepository,
                            HospitalRepository hospitalRepository, AuditLogRepository auditLogRepository,
-                           com.nova.emergency.repository.NotificationRepository notificationRepository) {
+                           com.nova.emergency.repository.NotificationRepository notificationRepository,
+                           GridFsStorageService gridFsStorageService) {
         this.incidentRepository = incidentRepository;
         this.rescueTeamRepository = rescueTeamRepository;
         this.hospitalRepository = hospitalRepository;
         this.auditLogRepository = auditLogRepository;
         this.notificationRepository = notificationRepository;
+        this.gridFsStorageService = gridFsStorageService;
     }
-
-    private static final Path UPLOAD_DIR = Paths.get("uploads").toAbsolutePath().normalize();
 
     // ─── Emergency Routing Rules Matrix ───────────────────────────
     private static final Map<String, List<String>> ROUTING_TABLE = Map.ofEntries(
@@ -171,38 +164,40 @@ public class IncidentService {
         incident.setLocationAccuracy(locationAccuracy);
         incident.setLocationCapturedAt(locationCapturedAt);
 
-        // Handle File Uploads safely
+        // Handle File Uploads — stored in MongoDB Atlas GridFS (no local filesystem)
         List<Incident.Attachment> attachments = new ArrayList<>();
         List<String> photoUrls = new ArrayList<>();
 
         if (photoFile != null && !photoFile.isEmpty()) {
-            String photoFilename = saveUploadedFile(photoFile, "photo");
-            if (photoFilename != null) {
-                String photoUrl = "/api/incidents/media/" + photoFilename;
+            String objectId = gridFsStorageService.store(photoFile, "photo");
+            if (objectId != null) {
+                String photoUrl = "/api/incidents/media/" + objectId;
                 photoUrls.add(photoUrl);
                 attachments.add(new Incident.Attachment(
                     UUID.randomUUID().toString(),
                     "image",
                     photoUrl,
-                    photoFile.getOriginalFilename() != null ? photoFile.getOriginalFilename() : photoFilename,
+                    photoFile.getOriginalFilename() != null ? photoFile.getOriginalFilename() : objectId,
                     photoFile.getSize()
                 ));
+                log.info("Photo stored in MongoDB GridFS: objectId={}", objectId);
             }
         }
         incident.setPhotoUrls(photoUrls);
 
         if (audioFile != null && !audioFile.isEmpty()) {
-            String audioFilename = saveUploadedFile(audioFile, "audio");
-            if (audioFilename != null) {
-                String audioUrl = "/api/incidents/media/" + audioFilename;
+            String objectId = gridFsStorageService.store(audioFile, "audio");
+            if (objectId != null) {
+                String audioUrl = "/api/incidents/media/" + objectId;
                 incident.setAudioUrl(audioUrl);
                 attachments.add(new Incident.Attachment(
                     UUID.randomUUID().toString(),
                     "audio",
                     audioUrl,
-                    audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename() : audioFilename,
+                    audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename() : objectId,
                     audioFile.getSize()
                 ));
+                log.info("Audio stored in MongoDB GridFS: objectId={}", objectId);
             }
         }
         incident.setAttachments(attachments);
@@ -663,52 +658,12 @@ public class IncidentService {
         return resolved;
     }
 
+
     // ─── Media File Storage & Retrieval ──────────────────────────
-
-    public Resource loadMediaFileAsResource(String filename) {
-        try {
-            Path filePath = UPLOAD_DIR.resolve(filename).normalize();
-            if (!filePath.startsWith(UPLOAD_DIR)) {
-                throw new IllegalArgumentException("Invalid file path traversal attempt.");
-            }
-            Resource resource = new UrlResource(filePath.toUri());
-            if (resource.exists() && resource.isReadable()) {
-                return resource;
-            } else {
-                throw new IllegalArgumentException("File not found: " + filename);
-            }
-        } catch (MalformedURLException ex) {
-            throw new IllegalArgumentException("File not found: " + filename, ex);
-        }
-    }
-
-    private String saveUploadedFile(MultipartFile file, String prefix) {
-        try {
-            if (!Files.exists(UPLOAD_DIR)) {
-                Files.createDirectories(UPLOAD_DIR);
-            }
-
-            String originalName = file.getOriginalFilename();
-            String ext = "bin";
-            if (originalName != null && originalName.contains(".")) {
-                ext = originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase();
-            } else if ("audio".equals(prefix)) {
-                ext = "webm";
-            } else if ("photo".equals(prefix)) {
-                ext = "jpg";
-            }
-
-            String cleanFilename = prefix + "-" + UUID.randomUUID().toString() + "." + ext;
-            Path targetLocation = UPLOAD_DIR.resolve(cleanFilename);
-            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-            return cleanFilename;
-        } catch (IOException ex) {
-            log.error("Could not store uploaded file: {}", ex.getMessage());
-            return null;
-        }
-    }
+    // File storage and retrieval is handled by GridFsStorageService — no local filesystem access.
 
     // ─── Helpers: Haversine & Responders ─────────────────────────
+
 
     private void assignNearestResponders(Incident incident, double lat, double lng) {
         try {
