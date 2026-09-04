@@ -66,9 +66,31 @@ export function validateName(name: string): string | null {
 
 export function validatePhone(phone?: string): string | null {
   if (!phone || !phone.trim()) return null;
-  const cleaned = phone.replace(/[\s\-()\\+]/g, '');
-  if (!/^[0-9]{7,15}$/.test(cleaned)) return 'Enter a valid phone number (7–15 digits)';
-  return null;
+  const trimmed = phone.trim();
+  const cleaned = trimmed.replace(/[\s\-()]/g, '');
+
+  // Sri Lankan local format: 07XXXXXXXX or 0XXXXXXXXX (10 digits)
+  if (/^0[1-9][0-9]{8}$/.test(cleaned)) {
+    return null; // Valid Sri Lankan local number
+  }
+
+  // Sri Lankan international format: +947XXXXXXXX or +94XXXXXXXXX or 947XXXXXXXX
+  if (/^(\+?94)[1-9][0-9]{8}$/.test(cleaned)) {
+    return null; // Valid Sri Lankan international number
+  }
+
+  // General international format: +[country code][number] (total 7 to 15 digits)
+  if (/^\+?[0-9]{7,15}$/.test(cleaned)) {
+    return null; // Valid international number
+  }
+
+  return 'Enter a valid phone number (e.g. +94 77 123 4567 or 077 123 4567)';
+}
+
+export function isSriLankanPhone(phone?: string): boolean {
+  if (!phone) return false;
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  return /^0[1-9][0-9]{8}$/.test(cleaned) || /^(\+?94)[1-9][0-9]{8}$/.test(cleaned);
 }
 
 export function validateConfirmPassword(password: string, confirm: string): string | null {

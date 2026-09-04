@@ -93,7 +93,7 @@ export default function CommandCenterPage() {
   }, [fetchAllData]);
 
   return (
-    <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin']} allowGuestCommander={true}>
+    <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin', 'citizen']} allowGuestCommander={true}>
       <div className="min-h-screen bg-nova-bg">
         <TopNav role="officer" />
         <DashboardShell role="officer">

@@ -332,7 +332,8 @@ export function Sidebar({ role, collapsed = false, onToggle }: SidebarProps) {
             )}
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const isActive = pathname === item.href || (item.href !== `/${role}` && pathname?.startsWith(item.href));
+                const isRootPath = ['/command', '/citizen', '/rescue', '/hospital', '/admin'].includes(item.href);
+                const isActive = pathname === item.href || (!isRootPath && pathname?.startsWith(`${item.href}/`));
 
                 return (
                   <Link

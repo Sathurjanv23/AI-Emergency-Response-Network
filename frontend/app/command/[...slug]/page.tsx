@@ -57,7 +57,7 @@ export default function CommandOperationsCatchAll() {
 
   if (operationalLoading) {
     return (
-      <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin']} allowGuestCommander={true}>
+      <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin', 'citizen']} allowGuestCommander={true}>
         <div className="min-h-screen bg-nova-bg">
           <TopNav role="officer" />
           <DashboardShell role="officer">
@@ -73,7 +73,7 @@ export default function CommandOperationsCatchAll() {
 
   if (operationalError) {
     return (
-      <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin']} allowGuestCommander={true}>
+      <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin', 'citizen']} allowGuestCommander={true}>
         <div className="min-h-screen bg-nova-bg">
           <TopNav role="officer" />
           <DashboardShell role="officer">
@@ -478,7 +478,7 @@ export default function CommandOperationsCatchAll() {
   };
 
   return (
-    <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin']} allowGuestCommander={true}>
+    <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin', 'citizen']} allowGuestCommander={true}>
       <div className="min-h-screen bg-nova-bg">
         <TopNav role="officer" />
         <DashboardShell role="officer">

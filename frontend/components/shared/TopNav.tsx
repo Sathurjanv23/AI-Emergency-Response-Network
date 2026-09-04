@@ -311,7 +311,7 @@ export function TopNav({ role, showTicker = true }: TopNavProps) {
     : 'DP';
 
   const userOriginalRole = effectiveUser?.role;
-  const isVisitingFromOtherPortal = Boolean(userOriginalRole && ['hospital', 'rescue_team'].includes(userOriginalRole));
+  const isVisitingFromOtherPortal = Boolean(userOriginalRole && ['hospital', 'rescue_team', 'citizen'].includes(userOriginalRole));
   const isCommandSection = Boolean(role === 'officer' || pathname?.startsWith('/command'));
 
   const handleSignOut = () => {

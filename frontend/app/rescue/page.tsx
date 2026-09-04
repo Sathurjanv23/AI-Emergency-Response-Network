@@ -12,12 +12,12 @@ import { Activity, Navigation, Users, Package, CheckCircle, Radio, MapPin, Clock
 import { cn, getTeamStatusColor, formatTimeAgo } from '@/lib/utils';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import type { RescueTeam } from '@/types';
+import type { RescueTeam, Incident } from '@/types';
 
 import { useTranslation } from '@/lib/i18n';
 
 export default function RescueDashboardPage() {
-  const { rescueTeams, incidents, updateMissionStatus, currentUser, fetchTeams, fetchIncidents, loading, errors } = useNovaStore();
+  const { rescueTeams, incidents, updateMissionStatus, acceptMission, currentUser, fetchTeams, fetchIncidents, loading, errors } = useNovaStore();
   const { t, localize, statusLabel } = useTranslation();
 
   useEffect(() => {
@@ -38,9 +38,32 @@ export default function RescueDashboardPage() {
   }, [rescueTeams, currentUser?.rescueTeamId]);
 
   const assignedIncident = incidents.find(
-    (i) => (i.id === myTeam?.currentIncident || i.assignedTeamId === myTeam?.id || i.assignedTeam === myTeam?.id) &&
-      (i.status !== 'resolved' && i.status !== 'closed' && i.status !== 'cancelled')
+    (i) => (
+      i.id === myTeam?.currentIncident ||
+      i.trackingCode === myTeam?.currentIncident ||
+      i.assignedTeamId === myTeam?.id ||
+      i.assignedTeam === myTeam?.id ||
+      (myTeam?.name && i.assignedTeamName === myTeam.name)
+    ) && (i.status !== 'resolved' && i.status !== 'closed' && i.status !== 'cancelled')
   );
+
+  // Available emergency dispatches for this team to accept
+  const availableDispatches = useMemo(() => {
+    if (!myTeam) return [];
+    return incidents.filter((i) => {
+      if (i.status === 'resolved' || i.status === 'closed' || i.status === 'cancelled') return false;
+      if (assignedIncident && (i.id === assignedIncident.id || i.trackingCode === assignedIncident.trackingCode)) return false;
+      const isAssignedToMe = i.assignedTeamId === myTeam.id || i.assignedTeam === myTeam.id;
+      if (isAssignedToMe) return false;
+      const isUnassignedOrDispatched = !i.assignedTeamId || i.status === 'dispatched' || i.status === 'submitted' || i.status === 'reported';
+      const isRescueType =
+        i.recommendedAgencies?.includes('search_rescue') ||
+        i.recommendedAgencies?.includes('fire_rescue') ||
+        i.recommendedAgencies?.includes('disaster_response') ||
+        ['flood', 'landslide', 'fire', 'building_collapse', 'road_accident', 'unknown', 'medical'].includes(i.type);
+      return isUnassignedOrDispatched && isRescueType;
+    });
+  }, [incidents, myTeam, assignedIncident]);
 
   const handleStatusChange = async (status: 'available' | 'en_route' | 'on_scene') => {
     if (!myTeam) return;
@@ -48,6 +71,18 @@ export default function RescueDashboardPage() {
       await updateMissionStatus(assignedIncident.id, status, myTeam.id);
     }
     toast.success(`Status updated: ${statusLabel(status)}`);
+  };
+
+  const handleAcceptMission = async (incident: Incident) => {
+    if (!myTeam) return;
+    try {
+      await acceptMission(incident.id, myTeam.id, myTeam.name);
+      toast.success('பணி ஏற்றுக்கொள்ளப்பட்டது (Mission Accepted)', {
+        description: `${incident.title} சம்பவத்திற்குப் புறப்படவும்.`,
+      });
+    } catch (err: any) {
+      toast.error('Could not accept mission', { description: err.message });
+    }
   };
 
   if (!currentUser || loading.teams || (Boolean(currentUser.rescueTeamId) && loading.incidents)) {
@@ -246,6 +281,80 @@ export default function RescueDashboardPage() {
                 <CheckCircle className="w-10 h-10 text-nova-low mx-auto mb-3" />
                 <p className="text-base font-bold text-nova-text">{t('common.no_active_incidents')}</p>
                 <p className="text-sm text-nova-text-dim mt-1">{t('heading.authority_dashboard')}</p>
+              </div>
+            )}
+
+            {/* Available Unassigned Emergency Dispatches Waiting for Rescue */}
+            {availableDispatches.length > 0 && (
+              <div className="nova-card border border-amber-500/30 bg-amber-500/5 rounded-xl p-5 space-y-4 shadow-lg shadow-amber-950/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                    <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                      <span>🚨 அவசர அழைப்புகள் & புதிய சம்பவங்கள்</span>
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-300 font-mono">
+                        {availableDispatches.length}
+                      </span>
+                    </h3>
+                  </div>
+                  <Link href="/rescue/incidents" className="text-xs text-nova-cyan hover:underline font-semibold flex items-center gap-1">
+                    {t('heading.view_all')} →
+                  </Link>
+                </div>
+
+                <div className="space-y-3">
+                  {availableDispatches.slice(0, 4).map((inc) => (
+                    <div
+                      key={inc.id}
+                      className="p-4 rounded-xl bg-nova-surface/80 border border-nova-border hover:border-amber-500/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs text-nova-cyan font-bold bg-nova-cyan/10 px-2 py-0.5 rounded">
+                            {inc.trackingCode || inc.id}
+                          </span>
+                          <SeverityBadge severity={inc.severity} />
+                          <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-nova-surface2 border border-nova-border text-nova-text-muted">
+                            {localize(inc.type)}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-nova-text">{localize(inc.title)}</h4>
+                        <div className="flex items-center gap-4 text-xs text-nova-text-dim flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-nova-cyan" />
+                            {localize(inc.location?.address || inc.location?.district || 'Colombo')}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-nova-cyan" />
+                            {inc.peopleAffected} {t('common.affected')}
+                          </span>
+                          {inc.aiAnalysis?.confidenceScore && (
+                            <span className="flex items-center gap-1 text-purple-400">
+                              <Zap className="w-3.5 h-3.5" />
+                              AI: {inc.aiAnalysis.confidenceScore}%
+                            </span>
+                          )}
+                        </div>
+                        {inc.aiAnalysis?.recommendedAction && (
+                          <p className="text-[11px] text-nova-text-muted italic line-clamp-1">
+                            "{localize(inc.aiAnalysis.recommendedAction)}"
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptMission(inc)}
+                          className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-900/30 transition-all flex items-center gap-1.5 active:scale-95"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          பணியை ஏற்கவும் (Accept Mission)
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
