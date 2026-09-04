@@ -94,8 +94,8 @@ function EmergencyMapComponent({
 
           const color =
             incident.severity === 'critical' ? '#ff3b3b' :
-            incident.severity === 'high' ? '#ff7a00' :
-            incident.severity === 'medium' ? '#ffd700' : '#22c55e';
+              incident.severity === 'high' ? '#ff7a00' :
+                incident.severity === 'medium' ? '#ffd700' : '#22c55e';
 
           const isCritical = incident.severity === 'critical';
 
@@ -137,7 +137,7 @@ function EmergencyMapComponent({
 
           const teamColor =
             team.status === 'available' ? '#22c55e' :
-            team.status === 'en_route' ? '#ffd700' : '#00d4ff';
+              team.status === 'en_route' ? '#ffd700' : '#00d4ff';
 
           const iconHtml = `
             <div style="

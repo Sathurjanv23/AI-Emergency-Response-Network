@@ -90,8 +90,11 @@ function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const { login } = useNovaStore();
 
-  const [email, setEmail] = useState(searchParams.get('email') ?? '');
-  const [otp, setOtp] = useState('');
+  const emailParam = searchParams.get('email') ?? '';
+  const tokenParam = searchParams.get('token') ?? searchParams.get('otp') ?? '';
+  const noToken = !emailParam && !tokenParam && searchParams.get('invalid') === 'true';
+  const [email, setEmail] = useState(emailParam);
+  const [otp, setOtp] = useState(tokenParam);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

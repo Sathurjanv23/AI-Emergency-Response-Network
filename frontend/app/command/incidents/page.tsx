@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
+import { AuthGuard } from '@/components/shared/AuthGuard';
 import { useNovaStore } from '@/lib/store/nova-store';
 import { SeverityBadge } from '@/components/emergency/SeverityBadge';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,12 +19,28 @@ const STATUSES: (IncidentStatus | 'all')[] = ['all', 'reported', 'ai_analyzed', 
 const TYPES: (EmergencyType | 'all')[] = ['all', 'flood', 'landslide', 'fire', 'road_accident', 'medical', 'missing_person', 'building_collapse'];
 
 export default function IncidentsQueuePage() {
-  const { incidents } = useNovaStore();
+  const { incidents, fetchIncidents } = useNovaStore();
   const { t, localize, statusLabel, severityLabel, emergencyTypeLabel, timeAgo } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<SeverityLevel | 'all'>('all');
   const [selectedStatus, setSelectedStatus] = useState<IncidentStatus | 'all'>('all');
   const [selectedType, setSelectedType] = useState<EmergencyType | 'all'>('all');
+
+  useEffect(() => {
+    fetchIncidents();
+  }, [fetchIncidents]);
+
+  const activeIncidentsCount = useMemo(() => {
+    return incidents.filter((i) => !['resolved', 'closed', 'cancelled'].includes(i.status?.toLowerCase())).length;
+  }, [incidents]);
+
+  const criticalActiveCount = useMemo(() => {
+    return incidents.filter((i) => !['resolved', 'closed', 'cancelled'].includes(i.status?.toLowerCase()) && i.severity === 'critical').length;
+  }, [incidents]);
+
+  const resolvedCount = useMemo(() => {
+    return incidents.filter((i) => ['resolved', 'closed'].includes(i.status?.toLowerCase())).length;
+  }, [incidents]);
 
   const filteredIncidents = useMemo(() => {
     return incidents.filter((incident) => {
@@ -40,27 +57,43 @@ export default function IncidentsQueuePage() {
   }, [incidents, searchTerm, selectedSeverity, selectedStatus, selectedType]);
 
   return (
-    <div className="min-h-screen bg-nova-bg">
-      <TopNav role="officer" />
-      <DashboardShell role="officer">
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold font-display text-nova-text">{t('heading.queue')}</h1>
-              <p className="text-sm text-nova-text-dim mt-0.5">{t('heading.authority_dashboard')}</p>
-            </div>
-            <div className="flex gap-2">
-              <div className="text-center px-4 py-2 bg-nova-surface border border-nova-border rounded-xl">
-                <div className="text-xs text-nova-text-muted">{t('stats.active_incidents')}</div>
-                <div className="text-lg font-bold text-nova-cyan font-mono">{incidents.filter(i => i.status !== 'resolved').length}</div>
+    <AuthGuard allowedRoles={['officer', 'hospital', 'rescue_team', 'admin']} allowGuestCommander={true}>
+      <div className="min-h-screen bg-nova-bg">
+        <TopNav role="officer" />
+        <DashboardShell role="officer">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold font-display text-nova-text">{t('heading.queue')}</h1>
+                <p className="text-sm text-nova-text-dim mt-0.5">{t('heading.authority_dashboard')} · Live incident tracking & triage queue</p>
               </div>
-              <div className="text-center px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <div className="text-xs text-red-400">{t('stats.critical')}</div>
-                <div className="text-lg font-bold text-red-400 font-mono">{incidents.filter(i => i.severity === 'critical' && i.status !== 'resolved').length}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-center px-3.5 py-2 bg-nova-surface border border-nova-border rounded-xl">
+                  <div className="text-[10px] text-nova-cyan uppercase font-bold tracking-wider">{t('stats.active_incidents')}</div>
+                  <div className="text-lg font-bold text-nova-cyan font-mono">{activeIncidentsCount}</div>
+                </div>
+                <div className="text-center px-3.5 py-2 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <div className="text-[10px] text-red-400 uppercase font-bold tracking-wider">Critical Active</div>
+                  <div className="text-lg font-bold text-red-400 font-mono">{criticalActiveCount}</div>
+                </div>
+                <div className="text-center px-3.5 py-2 bg-green-500/10 border border-green-500/20 rounded-xl">
+                  <div className="text-[10px] text-green-400 uppercase font-bold tracking-wider">Resolved</div>
+                  <div className="text-lg font-bold text-green-400 font-mono">{resolvedCount}</div>
+                </div>
+                <div className="text-center px-3.5 py-2 bg-nova-surface border border-nova-border rounded-xl">
+                  <div className="text-[10px] text-nova-text-muted uppercase font-bold tracking-wider">Total in DB</div>
+                  <div className="text-lg font-bold text-nova-text font-mono">{incidents.length}</div>
+                </div>
+                <button
+                  onClick={() => fetchIncidents()}
+                  className="px-3 py-2 bg-nova-surface border border-nova-border rounded-xl text-xs text-nova-text hover:border-nova-cyan/40 hover:text-nova-cyan transition-colors flex items-center gap-1.5 self-center"
+                  title="Refresh incidents"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-          </div>
 
           {/* Search & Filter Bar */}
           <div className="nova-card border border-nova-border rounded-xl p-4 space-y-3">
@@ -208,5 +241,6 @@ export default function IncidentsQueuePage() {
         </div>
       </DashboardShell>
     </div>
+    </AuthGuard>
   );
 }

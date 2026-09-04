@@ -280,7 +280,7 @@ export default function RescueOperationsCatchAll() {
               const distanceKm = calculateDistanceKm(teamLat, teamLng, incLat, incLng);
               const etaMins = calculateEtaMinutes(distanceKm);
               const isAcceptedByMe = (inc.assignedTeamId === myTeam.id || inc.assignedTeam === myTeam.id) &&
-                                     inc.status !== 'reported' && inc.status !== 'submitted';
+                inc.status !== 'reported' && inc.status !== 'submitted';
               const isAcceptedByOther = Boolean(
                 (inc.assignedTeamId && inc.assignedTeamId !== myTeam.id) ||
                 (inc.assignedTeam && inc.assignedTeam !== myTeam.id && !isAcceptedByMe)
@@ -466,7 +466,7 @@ export default function RescueOperationsCatchAll() {
               hospitals={[]}
               activeFilters={['incidents', 'teams']}
               selectedIncident={activeMission}
-              onSelectIncident={() => {}}
+              onSelectIncident={() => { }}
             />
 
             {/* Tactical GPS Overlay */}
@@ -526,7 +526,7 @@ export default function RescueOperationsCatchAll() {
 
                 const photo = (sourceIncident.photoUrls && sourceIncident.photoUrls.length > 0 && sourceIncident.photoUrls[0])
                   ? sourceIncident.photoUrls[0]
-                  : sourceIncident.attachments?.find(a => (a.type === 'image' || a.type === 'photo') && a.url)?.url;
+                  : sourceIncident.attachments?.find(a => ((a.type as string) === 'image' || (a.type as string) === 'photo') && a.url)?.url;
 
                 const audio = (sourceIncident.audioUrl && sourceIncident.audioUrl.trim() !== '')
                   ? sourceIncident.audioUrl
@@ -797,11 +797,11 @@ export default function RescueOperationsCatchAll() {
               <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
                 <ShieldAlert className="w-7 h-7" />
               </div>
-                <h3 className="text-lg font-bold text-nova-text">
-                  No Rescue Team Linked
-                </h3>
+              <h3 className="text-lg font-bold text-nova-text">
+                No Rescue Team Linked
+              </h3>
               <p className="text-xs text-nova-text-dim leading-relaxed">
-                  {`No rescue team is linked to this account (${currentUser.email}). Please contact your dispatch administrator to link your responder credentials to an active squad.`}
+                {`No rescue team is linked to this account (${currentUser.email}). Please contact your dispatch administrator to link your responder credentials to an active squad.`}
               </p>
               <div className="flex justify-center gap-3 pt-2">
                 <button

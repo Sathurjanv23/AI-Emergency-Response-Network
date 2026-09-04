@@ -63,7 +63,7 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
           errMsg = text;
         }
       }
-    } catch {}
+    } catch { }
 
     throw new ApiError(errMsg, res.status, errCode, errData);
   }
@@ -454,7 +454,7 @@ export const useNovaStore = create<AppState>()(
             const bc = new BroadcastChannel('nova-emergency-bus');
             bc.postMessage({ type: 'incident_created', data: incident });
             bc.close();
-          } catch {}
+          } catch { }
         }
         return { incidents: updated };
       }),
@@ -470,7 +470,7 @@ export const useNovaStore = create<AppState>()(
             const bc = new BroadcastChannel('nova-emergency-bus');
             bc.postMessage({ type: 'incident_updated', data: updatedInc });
             bc.close();
-          } catch {}
+          } catch { }
         }
         return { incidents: updated };
       }),
@@ -542,7 +542,7 @@ export const useNovaStore = create<AppState>()(
               data: confirmedIncident,
             });
             bc.close();
-          } catch {}
+          } catch { }
         }
 
         // 4. Refresh both incidents and teams from server
@@ -597,7 +597,7 @@ export const useNovaStore = create<AppState>()(
               data: confirmedIncident,
             });
             bc.close();
-          } catch {}
+          } catch { }
         }
 
         // 4. Refresh both incidents and teams from server after key status changes
@@ -825,7 +825,7 @@ export const useNovaStore = create<AppState>()(
     },
     stopSimulation: () =>
       set((state) => ({ simulation: { ...state.simulation, isActive: false } })),
-    advanceSimulation: () => {},
+    advanceSimulation: () => { },
 
     // ─── Stats ───────────────────────────────────────────────
     stats: {
@@ -838,20 +838,20 @@ export const useNovaStore = create<AppState>()(
     },
     refreshStats: () => {
       const state = get();
-      const activeInc = state.incidents.filter((i) => i.status !== 'resolved' && i.status !== 'closed');
-      const critInc = state.incidents.filter((i) => i.severity === 'critical' && i.status !== 'resolved');
-      const people = state.incidents.reduce((sum, i) => sum + (i.peopleAffected || 0), 0);
+      const activeInc = state.incidents.filter((i) => !['resolved', 'closed', 'cancelled'].includes(i.status?.toLowerCase()));
+      const critInc = activeInc.filter((i) => i.severity?.toLowerCase() === 'critical');
+      const people = activeInc.reduce((sum, i) => sum + (i.peopleAffected || 0), 0);
       const deployed = state.rescueTeams.filter((t) => t.status !== 'available' && t.status !== 'unavailable');
-      const withEta = state.incidents.filter((i) => typeof i.eta === 'number');
-      const avgTime = withEta.length > 0
-        ? +(withEta.reduce((sum, i) => sum + (i.eta || 0), 0) / withEta.length).toFixed(1)
+      const activeWithEta = activeInc.filter((i) => typeof i.eta === 'number' && i.eta > 0);
+      const avgTime = activeWithEta.length > 0
+        ? +(activeWithEta.reduce((sum, i) => sum + (i.eta || 0), 0) / activeWithEta.length).toFixed(1)
         : 0;
 
       set({
         stats: {
           activeIncidents: activeInc.length,
           criticalIncidents: critInc.length,
-          peopleAffected: people,
+          peopleAffected: people > 0 ? people : state.incidents.reduce((sum, i) => sum + (i.peopleAffected || 0), 0),
           teamsDeployed: deployed.length,
           avgResponseTime: avgTime,
           aiPredictions: state.riskPredictions.length,

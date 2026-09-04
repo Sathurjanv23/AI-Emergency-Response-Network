@@ -2,6 +2,7 @@
 
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { NovaLogo } from '@/components/shared/TopNav';
 import {
@@ -240,6 +241,7 @@ const EMERGENCY_TYPES = [
 // ─── Main Landing Page ───────────────────────────────────────
 
 export default function LandingPage() {
+  const router = useRouter();
   const { simulation } = useNovaStore();
 
   return (
@@ -267,7 +269,7 @@ export default function LandingPage() {
       {/* ─ Hero Section ─ */}
       <section className="relative min-h-[90vh] flex items-center overflow-hidden">
         {/* Background effects */}
-        <div className="absolute inset-0 hero-grid-bg opacity-30" />
+        <div className="absolute inset-0 hero-grid-bg opacity-30 pointer-events-none" />
         <motion.div
           className="absolute top-1/3 left-1/4 w-96 h-96 rounded-full blur-[120px] pointer-events-none"
           style={{ background: 'rgba(0,212,255,0.06)' }}
@@ -281,7 +283,7 @@ export default function LandingPage() {
           transition={{ duration: 6, repeat: Infinity, delay: 2 }}
         />
 
-        <div className="max-w-7xl mx-auto px-6 py-20 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center w-full">
+        <div className="max-w-7xl mx-auto px-6 py-20 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center w-full relative z-10">
           {/* Left: Hero Text */}
           <motion.div
             className="space-y-8"
@@ -313,10 +315,14 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 relative z-20">
               <Link
                 href="/command"
-                className="group flex items-center gap-2 bg-nova-cyan text-nova-bg font-bold px-6 py-3 rounded-xl hover:bg-nova-cyan-dim transition-all hover:shadow-nova-cyan"
+                onClick={(e) => {
+                  e.preventDefault();
+                  router.push('/command');
+                }}
+                className="group flex items-center gap-2 bg-nova-cyan text-nova-bg font-bold px-6 py-3 rounded-xl hover:bg-nova-cyan-dim transition-all hover:shadow-nova-cyan cursor-pointer select-none"
               >
                 <Map className="w-4 h-4" />
                 Launch Command Center
@@ -324,7 +330,11 @@ export default function LandingPage() {
               </Link>
               <Link
                 href="/citizen/sos"
-                className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-300 font-bold px-6 py-3 rounded-xl hover:bg-red-500/20 transition-all"
+                onClick={(e) => {
+                  e.preventDefault();
+                  router.push('/citizen/sos');
+                }}
+                className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-300 font-bold px-6 py-3 rounded-xl hover:bg-red-500/20 transition-all cursor-pointer select-none"
               >
                 <Radio className="w-4 h-4" />
                 Report Emergency
@@ -663,10 +673,14 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-4">
+            <div className="flex flex-wrap justify-center gap-4 relative z-20">
               <Link
                 href="/command"
-                className="group flex items-center gap-3 bg-nova-cyan text-nova-bg font-bold text-lg px-8 py-4 rounded-2xl hover:bg-nova-cyan-dim transition-all shadow-nova-cyan"
+                onClick={(e) => {
+                  e.preventDefault();
+                  router.push('/command');
+                }}
+                className="group flex items-center gap-3 bg-nova-cyan text-nova-bg font-bold text-lg px-8 py-4 rounded-2xl hover:bg-nova-cyan-dim transition-all shadow-nova-cyan cursor-pointer select-none"
               >
                 <Map className="w-5 h-5" />
                 Launch Command Center
@@ -674,7 +688,11 @@ export default function LandingPage() {
               </Link>
               <Link
                 href="/citizen/sos"
-                className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-300 font-bold text-lg px-8 py-4 rounded-2xl hover:bg-red-500/20 transition-all"
+                onClick={(e) => {
+                  e.preventDefault();
+                  router.push('/citizen/sos');
+                }}
+                className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 text-red-300 font-bold text-lg px-8 py-4 rounded-2xl hover:bg-red-500/20 transition-all cursor-pointer select-none"
               >
                 <Radio className="w-5 h-5" />
                 Report Emergency

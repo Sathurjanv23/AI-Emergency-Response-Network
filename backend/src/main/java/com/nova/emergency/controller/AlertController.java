@@ -45,44 +45,64 @@ public class AlertController {
     @GetMapping("/live")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getLiveAlerts() {
         List<Map<String, Object>> alerts = new ArrayList<>();
+        java.util.Set<String> seenIds = new java.util.HashSet<>();
 
+        // 1. Critical active incidents
         incidentRepository.findAll().stream()
             .filter(i -> "critical".equalsIgnoreCase(i.getSeverity()) && !isClosed(i.getStatus()))
-            .forEach(i -> alerts.add(Map.of(
-                "id", i.getId() != null ? i.getId() : "",
-                "type", "critical_incident",
-                "title", i.getTitle() != null ? i.getTitle() : "Critical incident",
-                "message", i.getDescription() != null ? i.getDescription() : "Critical incident requires response",
-                "severity", "critical",
-                "incidentId", i.getId() != null ? i.getId() : "",
-                "trackingCode", i.getTrackingCode() != null ? i.getTrackingCode() : "",
-                "timestamp", i.getUpdatedAt() != null ? i.getUpdatedAt() : (i.getReportedAt() != null ? i.getReportedAt() : "")
-            )));
+            .forEach(i -> {
+                String id = i.getId() != null ? i.getId() : "";
+                if (!id.isEmpty() && seenIds.add(id)) {
+                    java.util.Map<String, Object> map = new java.util.HashMap<>();
+                    map.put("id", id);
+                    map.put("type", "critical_incident");
+                    map.put("title", i.getTitle() != null ? i.getTitle() : "Critical Emergency");
+                    map.put("message", i.getDescription() != null ? i.getDescription() : "Immediate emergency response dispatched.");
+                    map.put("severity", "critical");
+                    map.put("incidentId", id);
+                    map.put("trackingCode", i.getTrackingCode() != null ? i.getTrackingCode() : "");
+                    map.put("timestamp", i.getUpdatedAt() != null ? i.getUpdatedAt() : (i.getReportedAt() != null ? i.getReportedAt() : ""));
+                    alerts.add(map);
+                }
+            });
 
-        // Recent unread notifications (last 20)
+        // 2. Unread notifications
         List<Notification> notifications = notificationRepository.findByReadFalseOrderByCreatedAtDesc();
-        notifications.stream()
-            .limit(20)
-            .forEach(n -> alerts.add(Map.of(
-                "id", n.getId() != null ? n.getId() : "",
-                "type", "notification",
-                "message", n.getMessage() != null ? n.getMessage() : "",
-                "severity", n.getSeverity() != null ? n.getSeverity() : "low",
-                "timestamp", n.getCreatedAt() != null ? n.getCreatedAt() : ""
-            )));
+        notifications.forEach(n -> {
+            String id = n.getId() != null ? n.getId() : "";
+            String relatedId = n.getRelatedId() != null ? n.getRelatedId() : "";
+            if ((id.isEmpty() || seenIds.add(id)) && (relatedId.isEmpty() || seenIds.add(relatedId))) {
+                java.util.Map<String, Object> map = new java.util.HashMap<>();
+                map.put("id", id);
+                map.put("type", n.getType() != null ? n.getType() : "notification");
+                map.put("title", n.getTitle() != null && !n.getTitle().isBlank() ? n.getTitle() : "Emergency Notification");
+                map.put("message", n.getMessage() != null ? n.getMessage() : "");
+                map.put("severity", n.getSeverity() != null ? n.getSeverity().toLowerCase() : "medium");
+                map.put("timestamp", n.getCreatedAt() != null ? n.getCreatedAt() : "");
+                if (!relatedId.isEmpty()) {
+                    map.put("relatedId", relatedId);
+                }
+                alerts.add(map);
+            }
+        });
 
-        // Active risk predictions with high risk
+        // 3. High risk predictions
         List<RiskPrediction> riskPredictions = riskPredictionRepository.findAll();
         riskPredictions.stream()
             .filter(rp -> rp.getFloodRisk() >= 70)
-            .limit(5)
-            .forEach(rp -> alerts.add(Map.of(
-                "id", rp.getId() != null ? rp.getId() : "",
-                "type", "risk_prediction",
-                "message", buildRiskMessage(rp),
-                "severity", rp.getRiskLevel() != null ? rp.getRiskLevel() : "high",
-                "timestamp", rp.getUpdatedAt() != null ? rp.getUpdatedAt() : ""
-            )));
+            .forEach(rp -> {
+                String id = rp.getId() != null ? rp.getId() : "";
+                if (id.isEmpty() || seenIds.add(id)) {
+                    java.util.Map<String, Object> map = new java.util.HashMap<>();
+                    map.put("id", id);
+                    map.put("type", "risk_prediction");
+                    map.put("title", "High Risk Warning: " + (rp.getZone() != null ? rp.getZone() : "Critical Zone"));
+                    map.put("message", buildRiskMessage(rp));
+                    map.put("severity", rp.getRiskLevel() != null ? rp.getRiskLevel().toLowerCase() : "high");
+                    map.put("timestamp", rp.getUpdatedAt() != null ? rp.getUpdatedAt() : "");
+                    alerts.add(map);
+                }
+            });
 
         // Sort by timestamp descending (most recent first)
         alerts.sort((a, b) -> {
@@ -91,7 +111,7 @@ public class AlertController {
             return tb.compareTo(ta);
         });
 
-        return ResponseEntity.ok(ApiResponse.ok(alerts.stream().limit(10).collect(Collectors.toList())));
+        return ResponseEntity.ok(ApiResponse.ok(alerts));
     }
 
     private boolean isClosed(String status) {

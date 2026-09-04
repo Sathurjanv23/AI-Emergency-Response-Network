@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { TopNav } from '@/components/shared/TopNav';
 import { DashboardShell } from '@/components/shared/Sidebar';
 import { useNovaStore } from '@/lib/store/nova-store';
@@ -284,6 +285,32 @@ export default function SOSPage() {
             </div>
             <span className="text-[11px] text-nova-text-muted">Internal portal dispatch only</span>
           </div>
+
+          {/* Guest Emergency Mode Banner */}
+          {(!currentUser || currentUser.role !== 'citizen') && (
+            <div className="p-4 rounded-xl bg-nova-surface2 border border-nova-cyan/30 text-xs flex items-start justify-between gap-3 shadow-sm">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-nova-cyan flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-nova-text text-sm">Emergency Reporting Mode</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+                      Open to All
+                    </span>
+                  </div>
+                  <p className="text-nova-text-dim text-xs mt-1 leading-relaxed">
+                    Emergency reporting is open to all citizens without signing in. To access full Citizen Portal features (personal dashboard, track all submitted reports, and safety resources), please sign in.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/login?portal=citizen"
+                className="flex items-center gap-1 text-xs font-bold text-nova-cyan hover:text-nova-cyan-dim bg-nova-cyan/10 border border-nova-cyan/30 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors flex-shrink-0"
+              >
+                Sign In <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          )}
 
           {step === 'form' && (
             <motion.div

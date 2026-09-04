@@ -47,9 +47,12 @@ public class RescueTeamService {
     public RescueTeam update(String id, Map<String, Object> data) {
         RescueTeam team = rescueTeamRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Rescue team not found: " + id));
-        if (data.containsKey("status")) team.setStatus((String) data.get("status"));
-        if (data.containsKey("currentIncident")) team.setCurrentIncident((String) data.get("currentIncident"));
-        if (data.containsKey("eta")) team.setEta((Integer) data.get("eta"));
+        if (data.containsKey("status"))
+            team.setStatus((String) data.get("status"));
+        if (data.containsKey("currentIncident"))
+            team.setCurrentIncident((String) data.get("currentIncident"));
+        if (data.containsKey("eta"))
+            team.setEta((Integer) data.get("eta"));
         team.setLastUpdated(Instant.now().toString());
         return rescueTeamRepository.save(team);
     }
