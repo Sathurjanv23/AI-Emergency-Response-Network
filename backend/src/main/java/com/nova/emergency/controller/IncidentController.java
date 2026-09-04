@@ -2,20 +2,19 @@ package com.nova.emergency.controller;
 
 import com.nova.emergency.dto.ApiResponse;
 import com.nova.emergency.model.Incident;
+import com.nova.emergency.service.GridFsStorageService;
 import com.nova.emergency.service.IncidentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
+import org.springframework.data.mongodb.gridfs.GridFsResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -26,9 +25,11 @@ public class IncidentController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(IncidentController.class);
 
     private final IncidentService incidentService;
+    private final GridFsStorageService gridFsStorageService;
 
-    public IncidentController(IncidentService incidentService) {
+    public IncidentController(IncidentService incidentService, GridFsStorageService gridFsStorageService) {
         this.incidentService = incidentService;
+        this.gridFsStorageService = gridFsStorageService;
     }
 
     @GetMapping
@@ -206,28 +207,31 @@ public class IncidentController {
         return ResponseEntity.ok(ApiResponse.ok(updated, "Incident resolved"));
     }
 
-    // ─── Stream Uploaded Audio / Photo Media ─────────────────────
+    // ─── Stream Media from MongoDB Atlas GridFS ───────────────────
 
-    @GetMapping("/media/{filename:.+}")
-    public ResponseEntity<Resource> getMedia(@PathVariable String filename) {
-        Resource resource = incidentService.loadMediaFileAsResource(filename);
-        String contentType = "application/octet-stream";
-        try {
-            Path path = resource.getFile().toPath();
-            contentType = Files.probeContentType(path);
-            if (contentType == null) {
-                if (filename.endsWith(".webm")) contentType = "audio/webm";
-                else if (filename.endsWith(".mp4")) contentType = "audio/mp4";
-                else if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) contentType = "image/jpeg";
-                else if (filename.endsWith(".png")) contentType = "image/png";
-            }
-        } catch (IOException ex) {
-            log.warn("Could not determine content type for file: {}", filename);
+    @GetMapping("/media/{objectId:.+}")
+    public ResponseEntity<StreamingResponseBody> getMedia(@PathVariable String objectId) {
+        GridFsResource resource = gridFsStorageService.load(objectId);
+        if (resource == null || !resource.exists()) {
+            log.warn("GridFS media not found for objectId: {}", objectId);
+            return ResponseEntity.notFound().build();
         }
+
+        String contentType = gridFsStorageService.getContentType(objectId);
+
+        StreamingResponseBody body = outputStream -> {
+            try (var inputStream = resource.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+            }
+        };
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(contentType))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
-                .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + objectId + "\"")
+                .body(body);
     }
 }
