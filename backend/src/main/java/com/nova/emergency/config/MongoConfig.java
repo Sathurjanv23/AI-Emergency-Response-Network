@@ -3,6 +3,7 @@ package com.nova.emergency.config;
 import com.nova.emergency.model.Incident;
 import com.nova.emergency.model.RescueTeam;
 import com.nova.emergency.model.Hospital;
+import com.nova.emergency.model.Project;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
@@ -43,6 +44,12 @@ public class MongoConfig {
                 // Hospital indices
                 mongoTemplate.indexOps(Hospital.class)
                     .ensureIndex(new Index().on("district", Sort.Direction.ASC).on("isActive", Sort.Direction.ASC));
+
+                // Project indices
+                mongoTemplate.indexOps(Project.class)
+                    .ensureIndex(new Index().on("ownerId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC));
+                mongoTemplate.indexOps(Project.class)
+                    .ensureIndex(new Index().on("status", Sort.Direction.ASC));
 
                 log.info("Verified all MongoDB operational indexes for Project NOVA.");
             } catch (Exception e) {
