@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ProjectItem, projectsApi } from '@/lib/api/client';
 import { EditProjectModal } from '@/components/projects/EditProjectModal';
 import { ArchiveConfirmModal } from '@/components/projects/ArchiveConfirmModal';
@@ -23,7 +23,6 @@ import {
 
 export default function ProjectDetailsPage() {
   const params = useParams();
-  const router = useRouter();
   const projectId = typeof params?.id === 'string' ? params.id : '';
 
   const [project, setProject] = useState<ProjectItem | null>(null);

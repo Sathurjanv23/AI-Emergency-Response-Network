@@ -23,11 +23,6 @@ export default function CitizenOperationsCatchAll() {
   const { incidents, addIncident, currentUser } = useNovaStore();
   const citizenReports = incidents.filter(i => i.reporterName === 'Amal Perera');
 
-  // If attempting to access My Reports without citizen login, require sign-in
-  if (slug === 'reports' && (!currentUser || currentUser.role !== 'citizen')) {
-    return <CitizenSignInPrompt feature="reports" />;
-  }
-
   // Form State for Report Emergency
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -35,6 +30,11 @@ export default function CitizenOperationsCatchAll() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // If attempting to access My Reports without citizen login, require sign-in
+  if (slug === 'reports' && (!currentUser || currentUser.role !== 'citizen')) {
+    return <CitizenSignInPrompt feature="reports" />;
+  }
 
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
