@@ -626,3 +626,28 @@ export interface DigitalTwinSnapshot {
   zones: DigitalTwinZone[];
 }
 
+// ─── ReqTrace Project Management Types ───────────────────────
+
+export type ProjectStatus = 'ACTIVE' | 'ARCHIVED';
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateProjectInput {
+  name: string;
+  description?: string;
+  status?: ProjectStatus;
+}
+

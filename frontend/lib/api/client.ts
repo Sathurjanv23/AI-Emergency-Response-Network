@@ -224,3 +224,66 @@ export const adminApi = {
   getAuditLogs: () => apiFetch('/admin/audit-logs'),
   getSystemHealth: () => apiFetch('/admin/system/health'),
 };
+
+// ─── ReqTrace Project Management API ──────────────────────────
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectPayload {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateProjectPayload {
+  name: string;
+  description?: string;
+  status?: 'ACTIVE' | 'ARCHIVED' | string;
+}
+
+export interface ApiResponseWrapper<T> {
+  data: T;
+  success: boolean;
+  code?: string;
+  message?: string;
+  timestamp?: string;
+  meta?: {
+    total?: number;
+    page?: number;
+    pageSize?: number;
+  };
+}
+
+export const projectsApi = {
+  list: (status?: string): Promise<ApiResponseWrapper<ProjectItem[]>> => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return apiFetch(`/projects${query}`);
+  },
+
+  getById: (id: string): Promise<ApiResponseWrapper<ProjectItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(id)}`),
+
+  create: (data: CreateProjectPayload): Promise<ApiResponseWrapper<ProjectItem>> =>
+    apiFetch('/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: UpdateProjectPayload): Promise<ApiResponseWrapper<ProjectItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  archive: (id: string): Promise<ApiResponseWrapper<ProjectItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(id)}/archive`, {
+      method: 'PATCH',
+    }),
+};

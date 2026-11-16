@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Map, AlertTriangle, Brain, BarChart3, Users,
   Truck, Building2, Cpu, Bell, FileText, Activity, Shield,
   Settings, ClipboardList, HeartPulse, Package, Radio, UserCheck,
-  Navigation, Waves, ChevronLeft, ChevronRight
+  Navigation, Waves, ChevronLeft, ChevronRight, Folder
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import type { UserRole } from '@/types';
@@ -75,6 +75,7 @@ function getNavSections(role: UserRole, badges: BadgeCounts): NavSection[] {
               badgeVariant: 'critical',
             },
             { href: '/command/analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+            { href: '/projects', label: 'ReqTrace Projects', icon: <Folder className="w-4 h-4" /> },
           ],
         },
       ];
@@ -84,6 +85,7 @@ function getNavSections(role: UserRole, badges: BadgeCounts): NavSection[] {
         {
           items: [
             { href: '/citizen', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { href: '/projects', label: 'ReqTrace Projects', icon: <Folder className="w-4 h-4" /> },
             { href: '/citizen/report', label: 'Report Emergency', icon: <AlertTriangle className="w-4 h-4" /> },
             { href: '/citizen/sos', label: 'SOS', icon: <Radio className="w-4 h-4" /> },
             { href: '/citizen/reports', label: 'My Reports', icon: <ClipboardList className="w-4 h-4" /> },
@@ -146,6 +148,7 @@ function getNavSections(role: UserRole, badges: BadgeCounts): NavSection[] {
             { href: '/admin/ai-config', label: 'AI Config', icon: <Cpu className="w-4 h-4" /> },
             { href: '/admin/monitoring', label: 'Monitoring', icon: <Activity className="w-4 h-4" /> },
             { href: '/admin/audit-logs', label: 'Audit Logs', icon: <FileText className="w-4 h-4" /> },
+            { href: '/projects', label: 'ReqTrace Projects', icon: <Folder className="w-4 h-4" /> },
           ],
         },
       ];
