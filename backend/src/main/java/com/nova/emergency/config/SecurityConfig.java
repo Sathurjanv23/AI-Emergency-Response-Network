@@ -87,6 +87,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/predictions/**", "/api/notifications/**",
                                 "/api/events/**")
                         .authenticated()
+                        .requestMatchers("/api/projects/**").authenticated()
                         // All other operations require valid authenticated JWT
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
