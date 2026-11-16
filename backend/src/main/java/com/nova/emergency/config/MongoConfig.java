@@ -51,6 +51,12 @@ public class MongoConfig {
                 mongoTemplate.indexOps(Project.class)
                     .ensureIndex(new Index().on("status", Sort.Direction.ASC));
 
+                // Document indices
+                mongoTemplate.indexOps(com.nova.emergency.model.Document.class)
+                    .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC));
+                mongoTemplate.indexOps(com.nova.emergency.model.Document.class)
+                    .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("status", Sort.Direction.ASC));
+
                 log.info("Verified all MongoDB operational indexes for Project NOVA.");
             } catch (Exception e) {
                 log.warn("Could not verify/create MongoDB indexes: {}", e.getMessage());
