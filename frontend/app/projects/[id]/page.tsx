@@ -19,6 +19,8 @@ import {
   Loader2,
   CheckCircle2,
   Lock,
+  FileCode,
+  ArrowRight,
 } from 'lucide-react';
 
 export default function ProjectDetailsPage() {
@@ -97,6 +99,13 @@ export default function ProjectDetailsPage() {
 
           {project && (
             <div className="flex items-center gap-2">
+              <Link
+                href={`/projects/${project.id}/requirements`}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-nova-cyan text-nova-bg hover:bg-nova-cyan-dim transition shadow-md shadow-nova-cyan/10"
+              >
+                <FileCode className="w-4 h-4" />
+                Requirements
+              </Link>
               <button
                 onClick={() => setEditModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border border-nova-border bg-nova-surface hover:bg-nova-surface2 text-nova-text transition"
@@ -232,6 +241,30 @@ export default function ProjectDetailsPage() {
                 <p className="text-sm text-nova-text leading-relaxed whitespace-pre-wrap">
                   {project.description || 'No description provided for this project.'}
                 </p>
+              </div>
+
+              {/* Requirements Hub Quick Link */}
+              <div className="pt-4 border-t border-nova-border/70">
+                <div className="p-4 rounded-xl bg-nova-surface2/50 border border-nova-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-nova-cyan/40 transition">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-nova-cyan/10 border border-nova-cyan/20 text-nova-cyan">
+                      <FileCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-nova-text">Requirements Management</h3>
+                      <p className="text-xs text-nova-text-dim">
+                        View, search, filter, and evolve requirements for this project.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/projects/${project.id}/requirements`}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-nova-cyan/10 hover:bg-nova-cyan/20 text-nova-cyan border border-nova-cyan/30 text-xs font-semibold self-start sm:self-auto transition"
+                  >
+                    Manage Requirements
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               </div>
             </div>
 
