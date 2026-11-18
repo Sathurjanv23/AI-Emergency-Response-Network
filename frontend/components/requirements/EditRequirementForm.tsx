@@ -12,6 +12,7 @@ import {
 import {
   validateRequirementForm,
   RequirementFormValidation,
+  mapRequirementApiError,
 } from '@/lib/project-validation';
 import {
   RequirementStatusBadge,
@@ -96,7 +97,19 @@ export function EditRequirementForm({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred during update.';
-      setApiError(msg);
+      if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+        setApiError(mapRequirementApiError(401).userMessage);
+      } else if (msg.includes('403') || msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('forbidden')) {
+        setApiError(mapRequirementApiError(403).userMessage);
+      } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+        setApiError(mapRequirementApiError(404).userMessage);
+      } else if (msg.includes('409') || msg.toLowerCase().includes('conflict')) {
+        setApiError(mapRequirementApiError(409).userMessage);
+      } else if (msg.includes('400') || msg.toLowerCase().includes('bad request')) {
+        setApiError(mapRequirementApiError(400, msg).userMessage);
+      } else {
+        setApiError(msg);
+      }
     } finally {
       setSubmitting(false);
     }

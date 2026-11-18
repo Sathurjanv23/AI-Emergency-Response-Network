@@ -47,6 +47,51 @@ export function filterProjects<T extends { name: string; description?: string; i
   });
 }
 
+export function filterRequirements<
+  T extends { requirementKey?: string; title?: string; description?: string; status?: string; priority?: string; type?: string }
+>(
+  requirements: T[],
+  filters: {
+    status?: string;
+    priority?: string;
+    type?: string;
+    searchQuery?: string;
+  }
+): T[] {
+  const { status = 'ALL', priority = 'ALL', type = 'ALL', searchQuery } = filters;
+  const q = searchQuery?.toLowerCase().trim();
+
+  return requirements.filter((req) => {
+    if (status !== 'ALL' && req.status !== status) return false;
+    if (priority !== 'ALL' && req.priority !== priority) return false;
+    if (type !== 'ALL' && req.type !== type) return false;
+    if (!q) return true;
+    const matchKey = req.requirementKey?.toLowerCase().includes(q) ?? false;
+    const matchTitle = req.title?.toLowerCase().includes(q) ?? false;
+    const matchDesc = req.description?.toLowerCase().includes(q) ?? false;
+    return matchKey || matchTitle || matchDesc;
+  });
+}
+
+export function paginateRequirements<T>(
+  items: T[],
+  page: number,
+  pageSize: number
+): { items: T[]; totalPages: number; totalItems: number; currentPage: number } {
+  const totalItems = items.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const safePage = Math.max(1, Math.min(page, totalPages));
+  const start = (safePage - 1) * pageSize;
+  const paginatedItems = items.slice(start, start + pageSize);
+
+  return {
+    items: paginatedItems,
+    totalPages,
+    totalItems,
+    currentPage: safePage,
+  };
+}
+
 export function mapProjectApiError(status: number, message?: string): { code: number; userMessage: string } {
   if (status === 401) {
     return { code: 401, userMessage: 'Authentication required. Please log in.' };
@@ -129,6 +174,9 @@ export function validateRequirementForm(data: {
 }
 
 export function mapRequirementApiError(status: number, message?: string): { code: number; userMessage: string } {
+  if (status === 400) {
+    return { code: 400, userMessage: message || 'Invalid requirement data. Please review the form fields.' };
+  }
   if (status === 401) {
     return { code: 401, userMessage: 'Authentication required. Please log in.' };
   }
@@ -138,7 +186,10 @@ export function mapRequirementApiError(status: number, message?: string): { code
   if (status === 404) {
     return { code: 404, userMessage: 'Requirement not found in this project.' };
   }
-  return { code: status, userMessage: message || 'An unexpected error occurred while loading requirement.' };
+  if (status === 409) {
+    return { code: 409, userMessage: message || 'Requirement conflict: A requirement with this key or state was modified elsewhere.' };
+  }
+  return { code: status, userMessage: message || 'An unexpected error occurred while processing requirement.' };
 }
 
 export function formatRequirementDate(isoString?: string): string {

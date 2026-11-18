@@ -12,6 +12,11 @@ import {
   projectsApi,
   requirementsApi,
 } from '@/lib/api/client';
+import {
+  filterRequirements,
+  paginateRequirements,
+  mapRequirementApiError,
+} from '@/lib/project-validation';
 import { RequirementsTable } from '@/components/requirements/RequirementsTable';
 import {
   ArrowLeft,
@@ -78,7 +83,15 @@ export default function RequirementsListPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to connect to requirement service.';
-      setError(msg);
+      if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+        setError(mapRequirementApiError(401).userMessage);
+      } else if (msg.includes('403') || msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('forbidden')) {
+        setError(mapRequirementApiError(403).userMessage);
+      } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+        setError(mapRequirementApiError(404).userMessage);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -92,31 +105,23 @@ export default function RequirementsListPage() {
     fetchRequirements();
   }, [fetchRequirements]);
 
-  // Client-side filtering fallback for live search typing
+  // Unified requirement filter engine
   const filteredRequirements = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return requirements.filter((req) => {
-      // Status filter
-      if (selectedStatus !== 'ALL' && req.status !== selectedStatus) return false;
-      // Priority filter
-      if (selectedPriority !== 'ALL' && req.priority !== selectedPriority) return false;
-      // Type filter
-      if (selectedType !== 'ALL' && req.type !== selectedType) return false;
-      // Search query
-      if (!q) return true;
-      const matchKey = req.requirementKey?.toLowerCase().includes(q) ?? false;
-      const matchTitle = req.title?.toLowerCase().includes(q) ?? false;
-      const matchDesc = req.description?.toLowerCase().includes(q) ?? false;
-      return matchKey || matchTitle || matchDesc;
+    return filterRequirements(requirements, {
+      status: selectedStatus,
+      priority: selectedPriority,
+      type: selectedType,
+      searchQuery,
     });
   }, [requirements, searchQuery, selectedStatus, selectedPriority, selectedType]);
 
-  // Pagination slice
-  const totalPages = Math.ceil(filteredRequirements.length / pageSize) || 1;
-  const paginatedRequirements = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredRequirements.slice(start, start + pageSize);
+  // Unified pagination engine
+  const pagination = useMemo(() => {
+    return paginateRequirements(filteredRequirements, currentPage, pageSize);
   }, [filteredRequirements, currentPage, pageSize]);
+
+  const totalPages = pagination.totalPages;
+  const paginatedRequirements = pagination.items;
 
   // Reset page when filters change
   useEffect(() => {

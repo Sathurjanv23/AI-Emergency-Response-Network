@@ -7,6 +7,7 @@ import {
   requirementsApi,
 } from '@/lib/api/client';
 import { RequirementStatusBadge } from './RequirementBadges';
+import { mapRequirementApiError } from '@/lib/project-validation';
 import {
   AlertTriangle,
   Loader2,
@@ -87,7 +88,17 @@ export function StatusTransitionModal({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An error occurred while updating status.';
-      setError(msg);
+      if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+        setError(mapRequirementApiError(401).userMessage);
+      } else if (msg.includes('403') || msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('forbidden')) {
+        setError(mapRequirementApiError(403).userMessage);
+      } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+        setError(mapRequirementApiError(404).userMessage);
+      } else if (msg.includes('409') || msg.toLowerCase().includes('conflict')) {
+        setError(mapRequirementApiError(409).userMessage);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
