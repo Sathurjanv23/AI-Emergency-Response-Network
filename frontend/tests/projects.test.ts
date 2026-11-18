@@ -6,6 +6,8 @@ import {
   validateRequirementDescription,
   validateRequirementForm,
   filterProjects,
+  filterRequirements,
+  paginateRequirements,
   mapProjectApiError,
   mapRequirementApiError,
   formatRequirementDate,
@@ -265,6 +267,63 @@ export function runProjectFrontendTests(): { total: number; passed: number; fail
   runTest('Cancel navigation: verifies cancel path generation', () => {
     const url = `/projects/p1/requirements/r1`;
     assert.strictEqual(url, '/projects/p1/requirements/r1');
+  });
+
+  // 8. Comprehensive Frontend Integration Tests (Task 04.2.5)
+  const sampleReqs = [
+    {
+      id: 'r1',
+      requirementKey: 'REQ-001',
+      title: 'Bi-Directional Matrix',
+      description: 'Traceability engine',
+      type: 'FUNCTIONAL',
+      priority: 'HIGH',
+      status: 'APPROVED',
+      sourceDocumentId: 'doc-001',
+    },
+    {
+      id: 'r2',
+      requirementKey: 'REQ-002',
+      title: 'Realtime Risk Graph',
+      description: 'Impact recalculation sub-second',
+      type: 'NON_FUNCTIONAL',
+      priority: 'CRITICAL',
+      status: 'IN_REVIEW',
+    },
+  ];
+
+  runTest('Integration: List filtering by status and type', () => {
+    const approved = filterRequirements(sampleReqs, { status: 'APPROVED' });
+    assert.strictEqual(approved.length, 1);
+    assert.strictEqual(approved[0].requirementKey, 'REQ-001');
+
+    const nfr = filterRequirements(sampleReqs, { type: 'NON_FUNCTIONAL' });
+    assert.strictEqual(nfr.length, 1);
+    assert.strictEqual(nfr[0].requirementKey, 'REQ-002');
+  });
+
+  runTest('Integration: Pagination calculation', () => {
+    const res = paginateRequirements(sampleReqs, 1, 1);
+    assert.strictEqual(res.items.length, 1);
+    assert.strictEqual(res.totalPages, 2);
+    assert.strictEqual(res.currentPage, 1);
+  });
+
+  runTest('Integration: HTTP 400 and 409 error mapping', () => {
+    const e400 = mapRequirementApiError(400);
+    assert.strictEqual(e400.code, 400);
+
+    const e409 = mapRequirementApiError(409);
+    assert.strictEqual(e409.code, 409);
+    assert.ok(e409.userMessage.includes('conflict'));
+  });
+
+  runTest('Integration: Empty list and non-matching search handling', () => {
+    const empty = filterRequirements([], { status: 'ALL' });
+    assert.strictEqual(empty.length, 0);
+
+    const noMatch = filterRequirements(sampleReqs, { searchQuery: 'no-match-token' });
+    assert.strictEqual(noMatch.length, 0);
   });
 
   return { total, passed, failures };

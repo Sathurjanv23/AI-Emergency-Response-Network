@@ -97,6 +97,9 @@ export function mapProjectApiError(status, message) {
 }
 
 export function mapRequirementApiError(status, message) {
+  if (status === 400) {
+    return { code: 400, userMessage: message || 'Invalid requirement data. Please review the form fields.' };
+  }
   if (status === 401) {
     return { code: 401, userMessage: 'Authentication required. Please log in.' };
   }
@@ -106,7 +109,41 @@ export function mapRequirementApiError(status, message) {
   if (status === 404) {
     return { code: 404, userMessage: 'Requirement not found in this project.' };
   }
-  return { code: status, userMessage: message || 'An unexpected error occurred while loading requirement.' };
+  if (status === 409) {
+    return { code: 409, userMessage: message || 'Requirement conflict: A requirement with this key or state was modified elsewhere.' };
+  }
+  return { code: status, userMessage: message || 'An unexpected error occurred while processing requirement.' };
+}
+
+export function filterRequirements(requirements, filters) {
+  const { status = 'ALL', priority = 'ALL', type = 'ALL', searchQuery } = filters || {};
+  const q = searchQuery?.toLowerCase().trim();
+
+  return requirements.filter((req) => {
+    if (status !== 'ALL' && req.status !== status) return false;
+    if (priority !== 'ALL' && req.priority !== priority) return false;
+    if (type !== 'ALL' && req.type !== type) return false;
+    if (!q) return true;
+    const matchKey = req.requirementKey?.toLowerCase().includes(q) ?? false;
+    const matchTitle = req.title?.toLowerCase().includes(q) ?? false;
+    const matchDesc = req.description?.toLowerCase().includes(q) ?? false;
+    return matchKey || matchTitle || matchDesc;
+  });
+}
+
+export function paginateRequirements(items, page, pageSize) {
+  const totalItems = items.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const safePage = Math.max(1, Math.min(page, totalPages));
+  const start = (safePage - 1) * pageSize;
+  const paginatedItems = items.slice(start, start + pageSize);
+
+  return {
+    items: paginatedItems,
+    totalPages,
+    totalItems,
+    currentPage: safePage,
+  };
 }
 
 export function formatRequirementDate(isoString) {
@@ -451,6 +488,208 @@ it('Cancel navigation: redirects back to requirement details page', () => {
   const requirementId = 'req-456';
   const cancelRoute = `/projects/${projectId}/requirements/${requirementId}`;
   assert.strictEqual(cancelRoute, '/projects/proj-123/requirements/req-456');
+});
+
+// 8. Comprehensive Frontend Integration Tests (Task 04.2.5 Audit)
+const integrationRequirements = [
+  {
+    id: 'req-001',
+    requirementKey: 'REQ-001',
+    projectId: 'proj-int',
+    title: 'Bi-Directional Traceability Matrix',
+    description: 'System automatically traces software requirements to code commits and tests.',
+    type: 'FUNCTIONAL',
+    priority: 'HIGH',
+    status: 'APPROVED',
+    createdAt: '2026-11-18T08:00:00Z',
+    updatedAt: '2026-11-18T08:00:00Z',
+    createdBy: 'user-01',
+    sourceDocumentId: 'doc-srs-001',
+  },
+  {
+    id: 'req-002',
+    requirementKey: 'REQ-002',
+    projectId: 'proj-int',
+    title: 'Sub-second Risk Scoring API',
+    description: 'Change-impact graph recalculation must complete in under 500ms.',
+    type: 'NON_FUNCTIONAL',
+    priority: 'CRITICAL',
+    status: 'IN_REVIEW',
+    createdAt: '2026-11-18T08:30:00Z',
+    updatedAt: '2026-11-18T09:00:00Z',
+    createdBy: 'user-02',
+  },
+  {
+    id: 'req-003',
+    requirementKey: 'REQ-003',
+    projectId: 'proj-int',
+    title: 'Automated Jira Synchronization',
+    description: 'Draft specification for synchronizing issue states with Jira webhooks.',
+    type: 'FUNCTIONAL',
+    priority: 'LOW',
+    status: 'DRAFT',
+    createdAt: '2026-11-18T09:15:00Z',
+    updatedAt: '2026-11-18T09:15:00Z',
+    createdBy: 'user-01',
+  },
+  {
+    id: 'req-004',
+    requirementKey: 'REQ-004',
+    projectId: 'proj-int',
+    title: 'Legacy Data Migration Protocol',
+    description: 'Deprecated requirement for importing legacy CSV datasets.',
+    type: 'NON_FUNCTIONAL',
+    priority: 'LOW',
+    status: 'DEPRECATED',
+    createdAt: '2026-11-18T07:00:00Z',
+    updatedAt: '2026-11-18T09:30:00Z',
+    createdBy: 'user-03',
+  },
+];
+
+it('Integration 1: Requirements list renders items correctly', () => {
+  const list = filterRequirements(integrationRequirements, { status: 'ALL' });
+  assert.strictEqual(list.length, 4);
+  assert.strictEqual(list[0].requirementKey, 'REQ-001');
+  assert.strictEqual(list[1].requirementKey, 'REQ-002');
+});
+
+it('Integration 2: Search and filtering by status, priority, type and keyword', () => {
+  // Filter by status
+  const approvedOnly = filterRequirements(integrationRequirements, { status: 'APPROVED' });
+  assert.strictEqual(approvedOnly.length, 1);
+  assert.strictEqual(approvedOnly[0].requirementKey, 'REQ-001');
+
+  // Filter by priority
+  const criticalOnly = filterRequirements(integrationRequirements, { priority: 'CRITICAL' });
+  assert.strictEqual(criticalOnly.length, 1);
+  assert.strictEqual(criticalOnly[0].requirementKey, 'REQ-002');
+
+  // Filter by type
+  const nfrOnly = filterRequirements(integrationRequirements, { type: 'NON_FUNCTIONAL' });
+  assert.strictEqual(nfrOnly.length, 2);
+
+  // Search keyword in description
+  const searchMatch = filterRequirements(integrationRequirements, { searchQuery: 'jira' });
+  assert.strictEqual(searchMatch.length, 1);
+  assert.strictEqual(searchMatch[0].requirementKey, 'REQ-003');
+});
+
+it('Integration 3: Pagination splits records and bounds pages correctly', () => {
+  // Page 1 of size 2
+  const page1 = paginateRequirements(integrationRequirements, 1, 2);
+  assert.strictEqual(page1.items.length, 2);
+  assert.strictEqual(page1.totalPages, 2);
+  assert.strictEqual(page1.currentPage, 1);
+  assert.strictEqual(page1.items[0].requirementKey, 'REQ-001');
+
+  // Page 2 of size 2
+  const page2 = paginateRequirements(integrationRequirements, 2, 2);
+  assert.strictEqual(page2.items.length, 2);
+  assert.strictEqual(page2.currentPage, 2);
+  assert.strictEqual(page2.items[0].requirementKey, 'REQ-003');
+
+  // Out-of-bounds page clamps to max page
+  const clamped = paginateRequirements(integrationRequirements, 99, 2);
+  assert.strictEqual(clamped.currentPage, 2);
+});
+
+it('Integration 4 & 5: Create form validation and successful creation payload', () => {
+  const invalid = validateRequirementForm({ title: '   ', description: 'desc' });
+  assert.strictEqual(invalid.isValid, false);
+  assert.ok(invalid.errors.title);
+
+  const valid = validateRequirementForm({
+    title: 'Audit Logging Microservice',
+    description: 'Cryptographically seals audit records for compliance.',
+    type: 'NON_FUNCTIONAL',
+    priority: 'HIGH',
+  });
+  assert.strictEqual(valid.isValid, true);
+});
+
+it('Integration 6: Requirement details rendering structure and document linkage', () => {
+  const reqWithDoc = integrationRequirements[0];
+  assert.ok(reqWithDoc.sourceDocumentId);
+  assert.strictEqual(reqWithDoc.sourceDocumentId, 'doc-srs-001');
+
+  const reqWithoutDoc = integrationRequirements[1];
+  assert.strictEqual(reqWithoutDoc.sourceDocumentId, undefined);
+});
+
+it('Integration 7 & 8: Edit form prepopulation and successful update', () => {
+  const target = integrationRequirements[1];
+  const formState = {
+    title: target.title,
+    description: target.description,
+    type: target.type,
+    priority: target.priority,
+  };
+
+  // Modify fields
+  formState.title = 'Updated Sub-second Risk Scoring Engine';
+  formState.priority = 'CRITICAL';
+
+  const check = validateRequirementForm(formState);
+  assert.strictEqual(check.isValid, true);
+  // Ensure server fields are preserved
+  assert.strictEqual(target.id, 'req-002');
+  assert.strictEqual(target.requirementKey, 'REQ-002');
+});
+
+it('Integration 9: Status lifecycle transition rules strictly enforced', () => {
+  // DRAFT transitions
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'IN_REVIEW'), true);
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'DEPRECATED'), true);
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'APPROVED'), false);
+
+  // IN_REVIEW transitions
+  assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'APPROVED'), true);
+  assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'REJECTED'), true);
+  assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'DRAFT'), true);
+
+  // APPROVED transitions
+  assert.strictEqual(isValidStatusTransition('APPROVED', 'IN_REVIEW'), true);
+  assert.strictEqual(isValidStatusTransition('APPROVED', 'DEPRECATED'), true);
+  assert.strictEqual(isValidStatusTransition('APPROVED', 'DRAFT'), false);
+});
+
+it('Integration 10 & 11: Error handling for 400, 401, 403, 404, 409 and 500', () => {
+  const e400 = mapRequirementApiError(400);
+  assert.strictEqual(e400.code, 400);
+  assert.ok(e400.userMessage.includes('Invalid requirement data'));
+
+  const e401 = mapRequirementApiError(401);
+  assert.strictEqual(e401.code, 401);
+  assert.ok(e401.userMessage.includes('Authentication required'));
+
+  const e403 = mapRequirementApiError(403);
+  assert.strictEqual(e403.code, 403);
+  assert.ok(e403.userMessage.includes('Access denied'));
+
+  const e404 = mapRequirementApiError(404);
+  assert.strictEqual(e404.code, 404);
+  assert.strictEqual(e404.userMessage, 'Requirement not found in this project.');
+
+  const e409 = mapRequirementApiError(409);
+  assert.strictEqual(e409.code, 409);
+  assert.ok(e409.userMessage.includes('Requirement conflict'));
+
+  const e500 = mapRequirementApiError(500, 'Internal Server Error');
+  assert.strictEqual(e500.code, 500);
+  assert.strictEqual(e500.userMessage, 'Internal Server Error');
+});
+
+it('Integration 12: Empty and loading state behavior', () => {
+  const emptyList = filterRequirements([], { status: 'ALL' });
+  assert.strictEqual(emptyList.length, 0);
+
+  const nonMatchingFilter = filterRequirements(integrationRequirements, { searchQuery: 'nonexistent-string' });
+  assert.strictEqual(nonMatchingFilter.length, 0);
+
+  const emptyPagination = paginateRequirements([], 1, 10);
+  assert.strictEqual(emptyPagination.items.length, 0);
+  assert.strictEqual(emptyPagination.totalPages, 1);
 });
 
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);

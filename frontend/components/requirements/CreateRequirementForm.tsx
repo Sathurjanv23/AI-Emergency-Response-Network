@@ -12,6 +12,7 @@ import {
 import {
   validateRequirementForm,
   RequirementFormValidation,
+  mapRequirementApiError,
 } from '@/lib/project-validation';
 import {
   FileCode,
@@ -89,7 +90,17 @@ export function CreateRequirementForm({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
-      setApiError(msg);
+      if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+        setApiError(mapRequirementApiError(401).userMessage);
+      } else if (msg.includes('403') || msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('forbidden')) {
+        setApiError(mapRequirementApiError(403).userMessage);
+      } else if (msg.includes('409') || msg.toLowerCase().includes('conflict')) {
+        setApiError(mapRequirementApiError(409, 'A requirement with this key or title already exists in the project.').userMessage);
+      } else if (msg.includes('400') || msg.toLowerCase().includes('bad request')) {
+        setApiError(mapRequirementApiError(400, msg).userMessage);
+      } else {
+        setApiError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
