@@ -116,8 +116,8 @@ export default function NewRequirementPage() {
           <CreateRequirementForm
             projectId={projectId}
             projectName={project?.name}
-            onSuccess={() => {
-              router.push(`/projects/${projectId}/requirements`);
+            onSuccess={(created) => {
+              router.push(`/projects/${projectId}/requirements/${created.id}`);
             }}
             onCancel={() => {
               router.push(`/projects/${projectId}/requirements`);

@@ -7,6 +7,8 @@ import {
   validateRequirementForm,
   filterProjects,
   mapProjectApiError,
+  mapRequirementApiError,
+  formatRequirementDate,
 } from '@/lib/project-validation';
 import type { ProjectItem } from '@/lib/api/client';
 
@@ -177,6 +179,35 @@ export function runProjectFrontendTests(): { total: number; passed: number; fail
       priority: 'HIGH',
     });
     assert.strictEqual(form.isValid, true);
+  });
+
+  // 6. Requirement Details & Error mapping
+  runTest('Requirement details: maps 401 Unauthorized securely', () => {
+    const err = mapRequirementApiError(401);
+    assert.strictEqual(err.code, 401);
+    assert.ok(err.userMessage.includes('Authentication required'));
+  });
+
+  runTest('Requirement details: maps 403 Forbidden without leaking requirement data', () => {
+    const err = mapRequirementApiError(403);
+    assert.strictEqual(err.code, 403);
+    assert.ok(err.userMessage.includes('Access denied'));
+  });
+
+  runTest('Requirement details: maps 404 to not found response', () => {
+    const err = mapRequirementApiError(404);
+    assert.strictEqual(err.code, 404);
+    assert.strictEqual(err.userMessage, 'Requirement not found in this project.');
+  });
+
+  runTest('Requirement date formatting: returns placeholder for null/undefined', () => {
+    assert.strictEqual(formatRequirementDate(), '—');
+    assert.strictEqual(formatRequirementDate(''), '—');
+  });
+
+  runTest('Requirement date formatting: formats valid ISO timestamp', () => {
+    const formatted = formatRequirementDate('2026-11-18T10:00:00Z');
+    assert.ok(formatted.includes('2026'));
   });
 
   return { total, passed, failures };

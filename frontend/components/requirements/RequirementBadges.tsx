@@ -152,14 +152,18 @@ export function RequirementPriorityBadge({ priority, className, size = 'sm' }: P
 interface TypeBadgeProps {
   type: RequirementType;
   className?: string;
+  size?: 'sm' | 'md';
 }
 
-export function RequirementTypeBadge({ type, className }: TypeBadgeProps) {
+export function RequirementTypeBadge({ type, className, size = 'sm' }: TypeBadgeProps) {
+  const sizeClasses = size === 'sm' ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1';
+
   if (type === 'NON_FUNCTIONAL') {
     return (
       <span
         className={cn(
-          'inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-purple-500/10 text-purple-300 border-purple-500/30',
+          'inline-flex items-center font-bold uppercase tracking-wider rounded border bg-purple-500/10 text-purple-300 border-purple-500/30',
+          sizeClasses,
           className
         )}
       >
@@ -171,7 +175,8 @@ export function RequirementTypeBadge({ type, className }: TypeBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-blue-500/10 text-blue-300 border-blue-500/30',
+        'inline-flex items-center font-bold uppercase tracking-wider rounded border bg-blue-500/10 text-blue-300 border-blue-500/30',
+        sizeClasses,
         className
       )}
     >

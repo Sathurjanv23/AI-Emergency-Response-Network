@@ -96,6 +96,35 @@ export function mapProjectApiError(status, message) {
   return { code: status, userMessage: message || 'An unexpected error occurred.' };
 }
 
+export function mapRequirementApiError(status, message) {
+  if (status === 401) {
+    return { code: 401, userMessage: 'Authentication required. Please log in.' };
+  }
+  if (status === 403) {
+    return { code: 403, userMessage: 'Access denied. You do not have permission to view or manage this requirement.' };
+  }
+  if (status === 404) {
+    return { code: 404, userMessage: 'Requirement not found in this project.' };
+  }
+  return { code: status, userMessage: message || 'An unexpected error occurred while loading requirement.' };
+}
+
+export function formatRequirementDate(isoString) {
+  if (!isoString) return '—';
+  try {
+    const d = new Date(isoString);
+    return isNaN(d.getTime()) ? isoString : d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return isoString;
+  }
+}
+
 const sampleProjects = [
   {
     id: 'proj-001',
@@ -265,6 +294,37 @@ it('Requirement form: completely valid form passes validation', () => {
   });
   assert.strictEqual(validForm.isValid, true);
   assert.strictEqual(Object.keys(validForm.errors).length, 0);
+});
+
+// 6. Requirement Details & Error mapping
+it('Requirement details: maps 401 Unauthorized securely', () => {
+  const err = mapRequirementApiError(401);
+  assert.strictEqual(err.code, 401);
+  assert.ok(err.userMessage.includes('Authentication required'));
+});
+
+it('Requirement details: maps 403 Forbidden without exposing requirement', () => {
+  const err = mapRequirementApiError(403);
+  assert.strictEqual(err.code, 403);
+  assert.ok(err.userMessage.includes('Access denied'));
+});
+
+it('Requirement details: maps 404 to not found response', () => {
+  const err = mapRequirementApiError(404);
+  assert.strictEqual(err.code, 404);
+  assert.strictEqual(err.userMessage, 'Requirement not found in this project.');
+});
+
+it('Requirement date formatting: returns placeholder for null/undefined', () => {
+  assert.strictEqual(formatRequirementDate(), '—');
+  assert.strictEqual(formatRequirementDate(null), '—');
+  assert.strictEqual(formatRequirementDate(''), '—');
+});
+
+it('Requirement date formatting: formats valid ISO timestamp', () => {
+  const formatted = formatRequirementDate('2026-11-18T10:00:00Z');
+  assert.ok(formatted.includes('2026'));
+  assert.ok(formatted.includes('Nov'));
 });
 
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);

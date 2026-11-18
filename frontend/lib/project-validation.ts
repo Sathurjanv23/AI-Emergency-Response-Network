@@ -127,3 +127,35 @@ export function validateRequirementForm(data: {
     errors,
   };
 }
+
+export function mapRequirementApiError(status: number, message?: string): { code: number; userMessage: string } {
+  if (status === 401) {
+    return { code: 401, userMessage: 'Authentication required. Please log in.' };
+  }
+  if (status === 403) {
+    return { code: 403, userMessage: 'Access denied. You do not have permission to view or manage this requirement.' };
+  }
+  if (status === 404) {
+    return { code: 404, userMessage: 'Requirement not found in this project.' };
+  }
+  return { code: status, userMessage: message || 'An unexpected error occurred while loading requirement.' };
+}
+
+export function formatRequirementDate(isoString?: string): string {
+  if (!isoString) return '—';
+  try {
+    const d = new Date(isoString);
+    return isNaN(d.getTime())
+      ? isoString
+      : d.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+  } catch {
+    return isoString;
+  }
+}
+
