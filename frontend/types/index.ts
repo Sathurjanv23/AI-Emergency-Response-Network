@@ -651,3 +651,42 @@ export interface UpdateProjectInput {
   status?: ProjectStatus;
 }
 
+// ─── ReqTrace Requirement Management Types ───────────────────
+
+export type RequirementType = 'FUNCTIONAL' | 'NON_FUNCTIONAL';
+
+export type RequirementPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type RequirementStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'DEPRECATED';
+
+export interface Requirement {
+  id: string;
+  projectId: string;
+  requirementKey: string;
+  title: string;
+  description: string;
+  type: RequirementType;
+  priority: RequirementPriority;
+  status: RequirementStatus;
+  sourceDocumentId?: string;
+  currentVersionId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRequirementInput {
+  title: string;
+  description: string;
+  type: RequirementType;
+  priority: RequirementPriority;
+  sourceDocumentId?: string;
+}
+
+export interface UpdateRequirementInput {
+  title: string;
+  description: string;
+  type: RequirementType;
+  priority: RequirementPriority;
+}
+

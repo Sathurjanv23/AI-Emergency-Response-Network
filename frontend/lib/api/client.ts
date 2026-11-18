@@ -287,3 +287,84 @@ export const projectsApi = {
       method: 'PATCH',
     }),
 };
+
+// ─── ReqTrace Requirement Management API ──────────────────────
+
+export type RequirementType = 'FUNCTIONAL' | 'NON_FUNCTIONAL';
+export type RequirementPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type RequirementStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'DEPRECATED';
+
+export interface RequirementItem {
+  id: string;
+  projectId: string;
+  requirementKey: string;
+  title: string;
+  description: string;
+  type: RequirementType;
+  priority: RequirementPriority;
+  status: RequirementStatus;
+  sourceDocumentId?: string;
+  currentVersionId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRequirementPayload {
+  title: string;
+  description: string;
+  type: RequirementType;
+  priority: RequirementPriority;
+  sourceDocumentId?: string;
+}
+
+export interface UpdateRequirementPayload {
+  title: string;
+  description: string;
+  type: RequirementType;
+  priority: RequirementPriority;
+}
+
+export interface ListRequirementsParams {
+  status?: string;
+  priority?: string;
+  type?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export const requirementsApi = {
+  list: (projectId: string, params?: ListRequirementsParams): Promise<ApiResponseWrapper<RequirementItem[]>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.status && params.status !== 'ALL') searchParams.append('status', params.status);
+    if (params?.priority && params.priority !== 'ALL') searchParams.append('priority', params.priority);
+    if (params?.type && params.type !== 'ALL') searchParams.append('type', params.type);
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.pageSize) searchParams.append('pageSize', params.pageSize.toString());
+    const qs = searchParams.toString();
+    return apiFetch(`/projects/${encodeURIComponent(projectId)}/requirements${qs ? `?${qs}` : ''}`);
+  },
+
+  getById: (projectId: string, requirementId: string): Promise<ApiResponseWrapper<RequirementItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}`),
+
+  create: (projectId: string, data: CreateRequirementPayload): Promise<ApiResponseWrapper<RequirementItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(projectId)}/requirements`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (projectId: string, requirementId: string, data: UpdateRequirementPayload): Promise<ApiResponseWrapper<RequirementItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  updateStatus: (projectId: string, requirementId: string, status: RequirementStatus): Promise<ApiResponseWrapper<RequirementItem>> =>
+    apiFetch(`/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+};
