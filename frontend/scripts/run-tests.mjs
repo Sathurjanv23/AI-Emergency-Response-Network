@@ -20,6 +20,52 @@ export function validateProjectDescription(description) {
   return { isValid: true };
 }
 
+export function validateRequirementTitle(title) {
+  if (!title || !title.trim()) {
+    return { isValid: false, error: 'Requirement title is required.' };
+  }
+  const trimmed = title.trim();
+  if (trimmed.length > 200) {
+    return { isValid: false, error: 'Requirement title cannot exceed 200 characters.' };
+  }
+  return { isValid: true };
+}
+
+export function validateRequirementDescription(description) {
+  if (!description || !description.trim()) {
+    return { isValid: false, error: 'Requirement description is required.' };
+  }
+  const trimmed = description.trim();
+  if (trimmed.length > 4000) {
+    return { isValid: false, error: 'Requirement description cannot exceed 4000 characters.' };
+  }
+  return { isValid: true };
+}
+
+export function validateRequirementForm(data) {
+  const errors = {};
+  const titleCheck = validateRequirementTitle(data.title);
+  if (!titleCheck.isValid) errors.title = titleCheck.error;
+
+  const descCheck = validateRequirementDescription(data.description);
+  if (!descCheck.isValid) errors.description = descCheck.error;
+
+  const validTypes = ['FUNCTIONAL', 'NON_FUNCTIONAL'];
+  if (!data.type || !validTypes.includes(data.type)) {
+    errors.type = 'Requirement type must be FUNCTIONAL or NON_FUNCTIONAL.';
+  }
+
+  const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  if (!data.priority || !validPriorities.includes(data.priority)) {
+    errors.priority = 'Priority must be LOW, MEDIUM, HIGH, or CRITICAL.';
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
 export function filterProjects(projects, filterStatus, searchQuery) {
   let list = projects;
   if (filterStatus !== 'ALL') {
@@ -157,6 +203,68 @@ it('Archive confirmation: transitions project to ARCHIVED state', () => {
   const archived = { ...activeProj, status: 'ARCHIVED', updatedAt: new Date().toISOString() };
   assert.strictEqual(archived.status, 'ARCHIVED');
   assert.strictEqual(archived.id, activeProj.id);
+});
+
+// 5. Requirement form validation
+it('Requirement title: empty or whitespace fails validation', () => {
+  const res1 = validateRequirementTitle('');
+  assert.strictEqual(res1.isValid, false);
+  assert.strictEqual(res1.error, 'Requirement title is required.');
+
+  const res2 = validateRequirementTitle('   ');
+  assert.strictEqual(res2.isValid, false);
+});
+
+it('Requirement title: exceeding 200 characters fails validation', () => {
+  const res = validateRequirementTitle('R'.repeat(201));
+  assert.strictEqual(res.isValid, false);
+  assert.strictEqual(res.error, 'Requirement title cannot exceed 200 characters.');
+});
+
+it('Requirement title: valid title passes validation', () => {
+  const res = validateRequirementTitle('Automated Traceability Matrix Generation');
+  assert.strictEqual(res.isValid, true);
+  assert.strictEqual(res.error, undefined);
+});
+
+it('Requirement description: empty or whitespace fails validation', () => {
+  const res = validateRequirementDescription('');
+  assert.strictEqual(res.isValid, false);
+  assert.strictEqual(res.error, 'Requirement description is required.');
+});
+
+it('Requirement description: exceeding 4000 characters fails validation', () => {
+  const res = validateRequirementDescription('D'.repeat(4001));
+  assert.strictEqual(res.isValid, false);
+  assert.strictEqual(res.error, 'Requirement description cannot exceed 4000 characters.');
+});
+
+it('Requirement description: valid description passes validation', () => {
+  const res = validateRequirementDescription('System shall generate bi-directional traceability graph on change commit.');
+  assert.strictEqual(res.isValid, true);
+});
+
+it('Requirement form: invalid type or priority reports errors', () => {
+  const invalidForm = validateRequirementForm({
+    title: 'Valid Title',
+    description: 'Valid Description',
+    type: 'INVALID_TYPE',
+    priority: 'INVALID_PRIORITY',
+  });
+  assert.strictEqual(invalidForm.isValid, false);
+  assert.ok(invalidForm.errors.type);
+  assert.ok(invalidForm.errors.priority);
+});
+
+it('Requirement form: completely valid form passes validation', () => {
+  const validForm = validateRequirementForm({
+    title: 'Bi-Directional Matrix',
+    description: 'Full traceability graph linking specifications and code.',
+    type: 'FUNCTIONAL',
+    priority: 'HIGH',
+  });
+  assert.strictEqual(validForm.isValid, true);
+  assert.strictEqual(Object.keys(validForm.errors).length, 0);
 });
 
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);

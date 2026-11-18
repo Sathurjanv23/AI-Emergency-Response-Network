@@ -2,6 +2,9 @@ import assert from 'assert';
 import {
   validateProjectName,
   validateProjectDescription,
+  validateRequirementTitle,
+  validateRequirementDescription,
+  validateRequirementForm,
   filterProjects,
   mapProjectApiError,
 } from '@/lib/project-validation';
@@ -134,6 +137,46 @@ export function runProjectFrontendTests(): { total: number; passed: number; fail
 
     assert.strictEqual(archived.status, 'ARCHIVED');
     assert.strictEqual(archived.id, activeProject.id);
+  });
+
+  // 5. Requirement form validation
+  runTest('Requirement form validation: empty title fails', () => {
+    const res = validateRequirementTitle('');
+    assert.strictEqual(res.isValid, false);
+    assert.strictEqual(res.error, 'Requirement title is required.');
+  });
+
+  runTest('Requirement form validation: title over 200 characters fails', () => {
+    const res = validateRequirementTitle('T'.repeat(201));
+    assert.strictEqual(res.isValid, false);
+    assert.strictEqual(res.error, 'Requirement title cannot exceed 200 characters.');
+  });
+
+  runTest('Requirement form validation: valid title passes', () => {
+    const res = validateRequirementTitle('Automated Traceability');
+    assert.strictEqual(res.isValid, true);
+  });
+
+  runTest('Requirement form validation: empty description fails', () => {
+    const res = validateRequirementDescription('');
+    assert.strictEqual(res.isValid, false);
+    assert.strictEqual(res.error, 'Requirement description is required.');
+  });
+
+  runTest('Requirement form validation: description over 4000 characters fails', () => {
+    const res = validateRequirementDescription('D'.repeat(4001));
+    assert.strictEqual(res.isValid, false);
+    assert.strictEqual(res.error, 'Requirement description cannot exceed 4000 characters.');
+  });
+
+  runTest('Requirement form validation: complete valid form passes', () => {
+    const form = validateRequirementForm({
+      title: 'Valid Title',
+      description: 'Valid Description',
+      type: 'FUNCTIONAL',
+      priority: 'HIGH',
+    });
+    assert.strictEqual(form.isValid, true);
   });
 
   return { total, passed, failures };
