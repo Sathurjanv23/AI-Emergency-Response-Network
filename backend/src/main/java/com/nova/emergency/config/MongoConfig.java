@@ -4,6 +4,7 @@ import com.nova.emergency.model.Incident;
 import com.nova.emergency.model.RescueTeam;
 import com.nova.emergency.model.Hospital;
 import com.nova.emergency.model.Project;
+import com.nova.emergency.model.Requirement;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
@@ -56,6 +57,16 @@ public class MongoConfig {
                     .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC));
                 mongoTemplate.indexOps(com.nova.emergency.model.Document.class)
                     .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("status", Sort.Direction.ASC));
+
+                // Requirement indices
+                mongoTemplate.indexOps(Requirement.class)
+                    .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("requirementKey", Sort.Direction.ASC).unique());
+                mongoTemplate.indexOps(Requirement.class)
+                    .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC));
+                mongoTemplate.indexOps(Requirement.class)
+                    .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("status", Sort.Direction.ASC));
+                mongoTemplate.indexOps(Requirement.class)
+                    .ensureIndex(new Index().on("projectId", Sort.Direction.ASC).on("priority", Sort.Direction.ASC));
 
                 log.info("Verified all MongoDB operational indexes for Project NOVA.");
             } catch (Exception e) {
