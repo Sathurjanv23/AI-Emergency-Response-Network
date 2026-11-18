@@ -1,13 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { RequirementItem } from '@/lib/api/client';
+import { RequirementItem, RequirementStatus } from '@/lib/api/client';
 import {
   RequirementPriorityBadge,
   RequirementStatusBadge,
   RequirementTypeBadge,
 } from './RequirementBadges';
-import { formatRequirementDate } from '@/lib/project-validation';
+import { StatusTransitionModal } from './StatusTransitionModal';
+import {
+  formatRequirementDate,
+  getAllowedStatusTransitions,
+} from '@/lib/project-validation';
 import {
   ArrowLeft,
   Calendar,
@@ -17,19 +22,81 @@ import {
   FileText,
   Hash,
   Layers,
+  Edit3,
+  SlidersHorizontal,
+  CheckCircle2,
+  XCircle,
+  Ban,
+  FileEdit,
 } from 'lucide-react';
 
 interface RequirementDetailsViewProps {
   requirement: RequirementItem;
   projectId: string;
   projectName?: string;
+  onStatusUpdated?: (updated: RequirementItem) => void;
 }
 
 export function RequirementDetailsView({
   requirement,
   projectId,
   projectName,
+  onStatusUpdated,
 }: RequirementDetailsViewProps) {
+  // Modal state for status transitions
+  const [targetStatus, setTargetStatus] = useState<RequirementStatus | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const allowedTransitions = getAllowedStatusTransitions(requirement.status) as RequirementStatus[];
+
+  const getTransitionLabel = (status: RequirementStatus) => {
+    switch (status) {
+      case 'IN_REVIEW':
+        return 'Submit for Review';
+      case 'APPROVED':
+        return 'Approve Requirement';
+      case 'REJECTED':
+        return 'Reject Requirement';
+      case 'DEPRECATED':
+        return 'Deprecate Requirement';
+      case 'DRAFT':
+      default:
+        return 'Return to Draft';
+    }
+  };
+
+  const getTransitionButtonClass = (status: RequirementStatus) => {
+    switch (status) {
+      case 'APPROVED':
+        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20';
+      case 'REJECTED':
+        return 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20';
+      case 'IN_REVIEW':
+        return 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20';
+      case 'DEPRECATED':
+        return 'bg-zinc-700/30 text-zinc-400 border-zinc-600/40 hover:bg-zinc-700/50';
+      case 'DRAFT':
+      default:
+        return 'bg-slate-500/10 text-slate-300 border-slate-500/30 hover:bg-slate-500/20';
+    }
+  };
+
+  const getTransitionIcon = (status: RequirementStatus) => {
+    switch (status) {
+      case 'APPROVED':
+        return <CheckCircle2 className="w-3.5 h-3.5" />;
+      case 'REJECTED':
+        return <XCircle className="w-3.5 h-3.5" />;
+      case 'IN_REVIEW':
+        return <Clock className="w-3.5 h-3.5" />;
+      case 'DEPRECATED':
+        return <Ban className="w-3.5 h-3.5" />;
+      case 'DRAFT':
+      default:
+        return <FileEdit className="w-3.5 h-3.5" />;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
@@ -49,11 +116,19 @@ export function RequirementDetailsView({
             )}
           </div>
 
-          {/* Badges Row */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Action & Badges Row */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <RequirementTypeBadge type={requirement.type} size="md" />
             <RequirementPriorityBadge priority={requirement.priority} size="md" />
             <RequirementStatusBadge status={requirement.status} size="md" />
+
+            <Link
+              href={`/projects/${projectId}/requirements/${requirement.id}/edit`}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-nova-cyan text-nova-bg hover:bg-nova-cyan-dim transition shadow-sm shadow-nova-cyan/20 ml-1"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Edit
+            </Link>
           </div>
         </div>
 
@@ -129,8 +204,58 @@ export function RequirementDetailsView({
           </section>
         </div>
 
-        {/* Right Column: Metadata Panel */}
+        {/* Right Column: Status Lifecycle Management & Metadata Panel */}
         <aside aria-labelledby="req-metadata-heading" className="space-y-6">
+          {/* Status Management Card */}
+          <div className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-nova-border/60">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-nova-cyan" />
+                <h2 className="text-sm font-semibold text-nova-text uppercase tracking-wider">
+                  Lifecycle Status
+                </h2>
+              </div>
+              <RequirementStatusBadge status={requirement.status} />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-nova-text-dim block">
+                Allowed Transitions:
+              </span>
+
+              {allowedTransitions.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {allowedTransitions.map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => {
+                        setTargetStatus(status);
+                        setModalOpen(true);
+                      }}
+                      className={`flex items-center justify-between w-full p-2.5 rounded-xl border text-xs font-semibold transition ${getTransitionButtonClass(
+                        status
+                      )}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {getTransitionIcon(status)}
+                        <span>{getTransitionLabel(status)}</span>
+                      </div>
+                      <span className="text-[10px] uppercase font-mono opacity-80">
+                        → {status}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-nova-text-muted py-2">
+                  No valid transitions available from current state.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Metadata & Attributes Card */}
           <div className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-nova-border/60">
               <Layers className="w-4 h-4 text-nova-cyan" />
@@ -212,7 +337,7 @@ export function RequirementDetailsView({
             </dl>
           </div>
 
-          {/* Quick Actions Card */}
+          {/* Navigation Action Card */}
           <div className="p-5 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-3">
             <h3 className="text-xs font-semibold uppercase text-nova-text-dim tracking-wider">
               Navigation
@@ -227,6 +352,25 @@ export function RequirementDetailsView({
           </div>
         </aside>
       </div>
+
+      {/* Confirmation Modal for Status Transitions */}
+      {targetStatus && (
+        <StatusTransitionModal
+          isOpen={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setTargetStatus(null);
+          }}
+          projectId={projectId}
+          requirement={requirement}
+          targetStatus={targetStatus}
+          onSuccess={(updated) => {
+            if (onStatusUpdated) {
+              onStatusUpdated(updated);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
