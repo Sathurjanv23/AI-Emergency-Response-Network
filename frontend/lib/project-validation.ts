@@ -159,3 +159,24 @@ export function formatRequirementDate(isoString?: string): string {
   }
 }
 
+// ─── Status Transition Management ────────────────────────────
+
+export const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ['IN_REVIEW', 'DEPRECATED'],
+  IN_REVIEW: ['APPROVED', 'REJECTED', 'DRAFT'],
+  APPROVED: ['IN_REVIEW', 'DEPRECATED'],
+  REJECTED: ['DRAFT'],
+  DEPRECATED: ['DRAFT'],
+};
+
+export function getAllowedStatusTransitions(currentStatus: string): string[] {
+  return ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
+}
+
+export function isValidStatusTransition(currentStatus: string, newStatus: string): boolean {
+  if (!currentStatus || !newStatus || currentStatus === newStatus) return false;
+  const allowed = getAllowedStatusTransitions(currentStatus);
+  return allowed.includes(newStatus);
+}
+
+

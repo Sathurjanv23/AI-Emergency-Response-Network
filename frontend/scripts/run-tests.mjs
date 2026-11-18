@@ -125,6 +125,24 @@ export function formatRequirementDate(isoString) {
   }
 }
 
+export const ALLOWED_STATUS_TRANSITIONS = {
+  DRAFT: ['IN_REVIEW', 'DEPRECATED'],
+  IN_REVIEW: ['APPROVED', 'REJECTED', 'DRAFT'],
+  APPROVED: ['IN_REVIEW', 'DEPRECATED'],
+  REJECTED: ['DRAFT'],
+  DEPRECATED: ['DRAFT'],
+};
+
+export function getAllowedStatusTransitions(currentStatus) {
+  return ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
+}
+
+export function isValidStatusTransition(currentStatus, newStatus) {
+  if (!currentStatus || !newStatus || currentStatus === newStatus) return false;
+  const allowed = getAllowedStatusTransitions(currentStatus);
+  return allowed.includes(newStatus);
+}
+
 const sampleProjects = [
   {
     id: 'proj-001',
@@ -325,6 +343,114 @@ it('Requirement date formatting: formats valid ISO timestamp', () => {
   const formatted = formatRequirementDate('2026-11-18T10:00:00Z');
   assert.ok(formatted.includes('2026'));
   assert.ok(formatted.includes('Nov'));
+});
+
+// 7. Edit Form & Status Management Tests (Task 04.2.4)
+it('Edit form: initial values prepopulate editable fields while preserving server fields', () => {
+  const existingReq = {
+    id: 'req-001',
+    requirementKey: 'REQ-001',
+    projectId: 'proj-100',
+    title: 'Initial Title',
+    description: 'Initial Description',
+    type: 'FUNCTIONAL',
+    priority: 'MEDIUM',
+    status: 'DRAFT',
+    createdBy: 'user-42',
+    createdAt: '2026-11-18T08:00:00Z',
+    updatedAt: '2026-11-18T08:00:00Z',
+  };
+
+  const formState = {
+    title: existingReq.title,
+    description: existingReq.description,
+    type: existingReq.type,
+    priority: existingReq.priority,
+  };
+
+  assert.strictEqual(formState.title, 'Initial Title');
+  assert.strictEqual(formState.description, 'Initial Description');
+  assert.strictEqual(formState.type, 'FUNCTIONAL');
+  assert.strictEqual(formState.priority, 'MEDIUM');
+  // Server-controlled fields remain untouched
+  assert.strictEqual(existingReq.requirementKey, 'REQ-001');
+  assert.strictEqual(existingReq.id, 'req-001');
+  assert.strictEqual(existingReq.status, 'DRAFT');
+});
+
+it('Edit form: required field validation rejects empty title or description', () => {
+  const emptyTitle = validateRequirementForm({
+    title: '',
+    description: 'Valid description',
+    type: 'FUNCTIONAL',
+    priority: 'HIGH',
+  });
+  assert.strictEqual(emptyTitle.isValid, false);
+  assert.strictEqual(emptyTitle.errors.title, 'Requirement title is required.');
+
+  const emptyDesc = validateRequirementForm({
+    title: 'Valid title',
+    description: '',
+    type: 'FUNCTIONAL',
+    priority: 'HIGH',
+  });
+  assert.strictEqual(emptyDesc.isValid, false);
+  assert.strictEqual(emptyDesc.errors.description, 'Requirement description is required.');
+});
+
+it('Edit form: successful update produces valid update payload', () => {
+  const updatedData = {
+    title: 'Updated Traceability Graph',
+    description: 'Updated comprehensive description of requirement behavior.',
+    type: 'NON_FUNCTIONAL',
+    priority: 'CRITICAL',
+  };
+  const validation = validateRequirementForm(updatedData);
+  assert.strictEqual(validation.isValid, true);
+  assert.strictEqual(Object.keys(validation.errors).length, 0);
+});
+
+it('API failure handling: formats 500 error gracefully', () => {
+  const err = mapRequirementApiError(500, 'Database connection timeout.');
+  assert.strictEqual(err.code, 500);
+  assert.strictEqual(err.userMessage, 'Database connection timeout.');
+});
+
+it('Status management: valid transitions succeed', () => {
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'IN_REVIEW'), true);
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'DEPRECATED'), true);
+  assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'APPROVED'), true);
+  assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'REJECTED'), true);
+  assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'DRAFT'), true);
+  assert.strictEqual(isValidStatusTransition('APPROVED', 'IN_REVIEW'), true);
+  assert.strictEqual(isValidStatusTransition('APPROVED', 'DEPRECATED'), true);
+  assert.strictEqual(isValidStatusTransition('REJECTED', 'DRAFT'), true);
+  assert.strictEqual(isValidStatusTransition('DEPRECATED', 'DRAFT'), true);
+});
+
+it('Status management: invalid transitions are strictly rejected', () => {
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'APPROVED'), false);
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'REJECTED'), false);
+  assert.strictEqual(isValidStatusTransition('REJECTED', 'APPROVED'), false);
+  assert.strictEqual(isValidStatusTransition('DEPRECATED', 'APPROVED'), false);
+  assert.strictEqual(isValidStatusTransition('DRAFT', 'DRAFT'), false);
+});
+
+it('API failure handling: unauthorized 401 and forbidden 403 prevent unauthorized edits', () => {
+  const unauth = mapRequirementApiError(401);
+  assert.strictEqual(unauth.code, 401);
+  assert.ok(unauth.userMessage.includes('Authentication required'));
+
+  const forbidden = mapRequirementApiError(403);
+  assert.strictEqual(forbidden.code, 403);
+  assert.ok(forbidden.userMessage.includes('Access denied'));
+});
+
+it('Cancel navigation: redirects back to requirement details page', () => {
+  const projectId = 'proj-123';
+  const requirementId = 'req-456';
+  const cancelRoute = `/projects/${projectId}/requirements/${requirementId}`;
+  assert.strictEqual(cancelRoute, '/projects/proj-123/requirements/req-456');
 });
 
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);

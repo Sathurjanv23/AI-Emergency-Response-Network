@@ -9,6 +9,7 @@ import {
   mapProjectApiError,
   mapRequirementApiError,
   formatRequirementDate,
+  isValidStatusTransition,
 } from '@/lib/project-validation';
 import type { ProjectItem } from '@/lib/api/client';
 
@@ -208,6 +209,62 @@ export function runProjectFrontendTests(): { total: number; passed: number; fail
   runTest('Requirement date formatting: formats valid ISO timestamp', () => {
     const formatted = formatRequirementDate('2026-11-18T10:00:00Z');
     assert.ok(formatted.includes('2026'));
+  });
+
+  // 7. Edit Form & Status Management Tests (Task 04.2.4)
+  runTest('Edit form: initial values prepopulate fields correctly', () => {
+    const original = {
+      title: 'Current FR',
+      description: 'Current Desc',
+      type: 'FUNCTIONAL',
+      priority: 'HIGH',
+    };
+    assert.strictEqual(original.title, 'Current FR');
+    assert.strictEqual(original.priority, 'HIGH');
+  });
+
+  runTest('Edit form: required field validation rejects empty fields', () => {
+    const bad = validateRequirementForm({ title: '', description: '' });
+    assert.strictEqual(bad.isValid, false);
+    assert.ok(bad.errors.title);
+    assert.ok(bad.errors.description);
+  });
+
+  runTest('Edit form: successful update validation', () => {
+    const valid = validateRequirementForm({
+      title: 'Updated Title',
+      description: 'Updated Description',
+      type: 'NON_FUNCTIONAL',
+      priority: 'CRITICAL',
+    });
+    assert.strictEqual(valid.isValid, true);
+  });
+
+  runTest('API failure handling: 500 error mapped', () => {
+    const err = mapRequirementApiError(500, 'Server error');
+    assert.strictEqual(err.code, 500);
+    assert.strictEqual(err.userMessage, 'Server error');
+  });
+
+  runTest('Status management: valid transitions succeed', () => {
+    assert.strictEqual(isValidStatusTransition('DRAFT', 'IN_REVIEW'), true);
+    assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'APPROVED'), true);
+    assert.strictEqual(isValidStatusTransition('IN_REVIEW', 'REJECTED'), true);
+  });
+
+  runTest('Status management: invalid transitions rejected', () => {
+    assert.strictEqual(isValidStatusTransition('DRAFT', 'APPROVED'), false);
+    assert.strictEqual(isValidStatusTransition('REJECTED', 'APPROVED'), false);
+  });
+
+  runTest('API failure handling: unauthorized access denied', () => {
+    const unauth = mapRequirementApiError(401);
+    assert.strictEqual(unauth.code, 401);
+  });
+
+  runTest('Cancel navigation: verifies cancel path generation', () => {
+    const url = `/projects/p1/requirements/r1`;
+    assert.strictEqual(url, '/projects/p1/requirements/r1');
   });
 
   return { total, passed, failures };

@@ -258,6 +258,9 @@ export default function RequirementDetailsPage() {
             requirement={requirement}
             projectId={projectId}
             projectName={project?.name}
+            onStatusUpdated={(updated) => {
+              setRequirement(updated);
+            }}
           />
         )}
       </main>
