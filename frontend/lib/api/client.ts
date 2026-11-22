@@ -10,7 +10,7 @@ const AI_BASE = process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001';
 
 // ─── Generic Fetch Wrapper ───────────────────────────────────
 
-async function apiFetch<T>(
+export async function apiFetch<T>(
   endpoint: string,
   options?: RequestInit,
   base: string = API_BASE
@@ -33,7 +33,7 @@ async function apiFetch<T>(
   return res.json();
 }
 
-function getAuthToken(): string {
+export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('nova_token') || '';
 }
@@ -368,3 +368,14 @@ export const requirementsApi = {
       body: JSON.stringify({ status }),
     }),
 };
+
+// ─── ReqTrace Versioning API ──────────────────────────────────
+export {
+  requirementVersionsApi,
+  type RequirementVersionItem,
+  type VersionChangeType,
+  type VersionReviewStatus,
+  type CreateRequirementVersionPayload,
+  type ApproveRequirementVersionPayload,
+  type RejectRequirementVersionPayload,
+} from './requirementVersions';
