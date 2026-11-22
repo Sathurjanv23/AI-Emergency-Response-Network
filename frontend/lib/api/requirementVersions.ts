@@ -1,6 +1,6 @@
 import { apiFetch, ApiResponseWrapper } from './client';
 
-export type VersionChangeType = 'CREATED' | 'UPDATED' | 'DEPRECATED' | 'RESTORED';
+export type VersionChangeType = 'CREATED' | 'UPDATED' | 'CLARIFIED' | 'CORRECTED';
 export type VersionReviewStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED';
 
 export interface RequirementVersionItem {
@@ -53,5 +53,18 @@ export const requirementVersionsApi = {
   ): Promise<ApiResponseWrapper<RequirementVersionItem>> =>
     apiFetch(
       `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}`
+    ),
+
+  createDraftVersion: (
+    projectId: string,
+    requirementId: string,
+    payload: CreateRequirementVersionPayload
+  ): Promise<ApiResponseWrapper<RequirementVersionItem>> =>
+    apiFetch(
+      `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
     ),
 };

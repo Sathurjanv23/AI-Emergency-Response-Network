@@ -241,6 +241,7 @@ export function RequirementDetailsView({
             <RequirementVersionTimeline
               projectId={projectId}
               requirementId={requirement.id}
+              requirement={requirement}
               currentVersionId={requirement.currentVersionId}
             />
           )}
