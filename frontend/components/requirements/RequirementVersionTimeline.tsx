@@ -8,8 +8,9 @@ import {
   VersionReviewStatus,
 } from '@/lib/api/requirementVersions';
 import { formatRequirementDate, mapRequirementApiError } from '@/lib/project-validation';
-import { RequirementItem } from '@/lib/api/client';
+import { RequirementItem, requirementsApi } from '@/lib/api/client';
 import { CreateRequirementVersionForm } from './CreateRequirementVersionForm';
+import { RequirementVersionReviewActions } from './RequirementVersionReviewActions';
 import {
   Clock,
   History,
@@ -36,6 +37,7 @@ interface RequirementVersionTimelineProps {
   currentVersionId?: string | null;
   onSelectVersion?: (version: RequirementVersionItem) => void;
   onVersionCreated?: (version: RequirementVersionItem) => void;
+  onRequirementUpdated?: (updated: RequirementItem) => void;
 }
 
 export function VersionReviewStatusBadge({ status }: { status: VersionReviewStatus }) {
@@ -110,6 +112,7 @@ export function RequirementVersionTimeline({
   currentVersionId,
   onSelectVersion,
   onVersionCreated,
+  onRequirementUpdated,
 }: RequirementVersionTimelineProps) {
   const [versions, setVersions] = useState<RequirementVersionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +156,31 @@ export function RequirementVersionTimeline({
       setLoading(false);
     }
   }, [projectId, requirementId]);
+
+  const handleReviewActionSuccess = async (
+    action: 'submit' | 'approve' | 'reject',
+    updatedVersion: RequirementVersionItem
+  ) => {
+    if (action === 'submit') {
+      setCreatedNotice(`Version v${updatedVersion.versionNumber} successfully submitted for review!`);
+    } else if (action === 'approve') {
+      setCreatedNotice(`Version v${updatedVersion.versionNumber} successfully approved! Promoted to active specification.`);
+      // Refresh parent requirement details to synchronize active specification tab
+      try {
+        const refreshedReq = await requirementsApi.getById(projectId, requirementId);
+        if (refreshedReq.success && refreshedReq.data && onRequirementUpdated) {
+          onRequirementUpdated(refreshedReq.data);
+        }
+      } catch {
+        // Non-fatal, version history will still reload
+      }
+    } else if (action === 'reject') {
+      setCreatedNotice(`Version v${updatedVersion.versionNumber} rejected with reviewer feedback.`);
+    }
+
+    // Refresh version timeline to reflect updated reviewStatus, audit timestamps, and comments
+    fetchVersions();
+  };
 
   useEffect(() => {
     fetchVersions();
@@ -497,6 +525,15 @@ export function RequirementVersionTimeline({
                     </p>
                   </div>
                 )}
+
+                {/* Review Workflow Actions (Draft submit, In-Review approve/reject, Read-only badge) */}
+                <RequirementVersionReviewActions
+                  projectId={projectId}
+                  requirementId={requirementId}
+                  version={ver}
+                  requirementTitle={requirement?.title || ver.title}
+                  onActionSuccess={handleReviewActionSuccess}
+                />
 
                 {/* Expandable Historical Snapshot Section */}
                 {isExpanded && (
