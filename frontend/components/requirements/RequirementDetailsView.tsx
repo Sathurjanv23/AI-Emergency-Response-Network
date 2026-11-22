@@ -28,7 +28,9 @@ import {
   XCircle,
   Ban,
   FileEdit,
+  History,
 } from 'lucide-react';
+import { RequirementVersionTimeline } from './RequirementVersionTimeline';
 
 interface RequirementDetailsViewProps {
   requirement: RequirementItem;
@@ -46,6 +48,7 @@ export function RequirementDetailsView({
   // Modal state for status transitions
   const [targetStatus, setTargetStatus] = useState<RequirementStatus | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'specification' | 'history'>('specification');
 
   const allowedTransitions = getAllowedStatusTransitions(requirement.status) as RequirementStatus[];
 
@@ -146,62 +149,101 @@ export function RequirementDetailsView({
 
       {/* Main Content Grid: Description & Metadata */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left / Main Column: Detailed Description */}
+        {/* Left / Main Column: Tabbed Specification & Version History */}
         <div className="lg:col-span-2 space-y-6">
-          <section
-            aria-labelledby="req-description-heading"
-            className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-3"
-          >
-            <div className="flex items-center gap-2 pb-3 border-b border-nova-border/60">
-              <FileCode className="w-4 h-4 text-nova-cyan" />
-              <h2
-                id="req-description-heading"
-                className="text-sm font-semibold text-nova-text uppercase tracking-wider"
+          {/* Tab Navigation */}
+          <div className="flex items-center gap-2 border-b border-nova-border pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('specification')}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-t-lg transition border-b-2 -mb-[5px] ${
+                activeTab === 'specification'
+                  ? 'border-nova-cyan text-nova-cyan bg-nova-surface2/60'
+                  : 'border-transparent text-nova-text-dim hover:text-nova-text hover:bg-nova-surface2/30'
+              }`}
+            >
+              <FileCode className="w-4 h-4" />
+              <span>Specification</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('history')}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-t-lg transition border-b-2 -mb-[5px] ${
+                activeTab === 'history'
+                  ? 'border-nova-cyan text-nova-cyan bg-nova-surface2/60'
+                  : 'border-transparent text-nova-text-dim hover:text-nova-text hover:bg-nova-surface2/30'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>Version History</span>
+            </button>
+          </div>
+
+          {activeTab === 'specification' ? (
+            <>
+              <section
+                aria-labelledby="req-description-heading"
+                className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-3"
               >
-                Requirement Specification
-              </h2>
-            </div>
-
-            <div className="text-sm text-nova-text leading-relaxed whitespace-pre-wrap font-sans pt-1">
-              {requirement.description}
-            </div>
-          </section>
-
-          {/* Source Document Context */}
-          <section
-            aria-labelledby="req-source-heading"
-            className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-3"
-          >
-            <div className="flex items-center gap-2 pb-3 border-b border-nova-border/60">
-              <FileText className="w-4 h-4 text-nova-cyan" />
-              <h2
-                id="req-source-heading"
-                className="text-sm font-semibold text-nova-text uppercase tracking-wider"
-              >
-                Source Document Origin
-              </h2>
-            </div>
-
-            {requirement.sourceDocumentId ? (
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-nova-surface2/60 border border-nova-border">
-                <FileText className="w-5 h-5 text-nova-cyan shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-nova-text truncate">
-                    Document Ref: {requirement.sourceDocumentId}
-                  </p>
-                  <p className="text-[11px] text-nova-text-muted">
-                    This requirement is linked to an ingested architectural or SRS document.
-                  </p>
+                <div className="flex items-center gap-2 pb-3 border-b border-nova-border/60">
+                  <FileCode className="w-4 h-4 text-nova-cyan" />
+                  <h2
+                    id="req-description-heading"
+                    className="text-sm font-semibold text-nova-text uppercase tracking-wider"
+                  >
+                    Requirement Specification
+                  </h2>
                 </div>
-              </div>
-            ) : (
-              <div className="p-4 rounded-xl bg-nova-surface2/30 border border-dashed border-nova-border text-center">
-                <p className="text-xs text-nova-text-muted">
-                  No source document linked. This requirement was authored directly.
-                </p>
-              </div>
-            )}
-          </section>
+
+                <div className="text-sm text-nova-text leading-relaxed whitespace-pre-wrap font-sans pt-1">
+                  {requirement.description}
+                </div>
+              </section>
+
+              {/* Source Document Context */}
+              <section
+                aria-labelledby="req-source-heading"
+                className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-3"
+              >
+                <div className="flex items-center gap-2 pb-3 border-b border-nova-border/60">
+                  <FileText className="w-4 h-4 text-nova-cyan" />
+                  <h2
+                    id="req-source-heading"
+                    className="text-sm font-semibold text-nova-text uppercase tracking-wider"
+                  >
+                    Source Document Origin
+                  </h2>
+                </div>
+
+                {requirement.sourceDocumentId ? (
+                  <div className="flex items-center gap-3 p-3.5 rounded-xl bg-nova-surface2/60 border border-nova-border">
+                    <FileText className="w-5 h-5 text-nova-cyan shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-nova-text truncate">
+                        Document Ref: {requirement.sourceDocumentId}
+                      </p>
+                      <p className="text-[11px] text-nova-text-muted">
+                        This requirement is linked to an ingested architectural or SRS document.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-nova-surface2/30 border border-dashed border-nova-border text-center">
+                    <p className="text-xs text-nova-text-muted">
+                      No source document linked. This requirement was authored directly.
+                    </p>
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <RequirementVersionTimeline
+              projectId={projectId}
+              requirementId={requirement.id}
+              currentVersionId={requirement.currentVersionId}
+            />
+          )}
         </div>
 
         {/* Right Column: Status Lifecycle Management & Metadata Panel */}
