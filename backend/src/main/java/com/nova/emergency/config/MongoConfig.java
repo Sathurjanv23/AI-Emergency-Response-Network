@@ -11,6 +11,8 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.MongoDatabaseFactory;
+import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
@@ -22,6 +24,11 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 public class MongoConfig {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MongoConfig.class);
+
+    @Bean
+    public MongoTransactionManager transactionManager(MongoDatabaseFactory dbFactory) {
+        return new MongoTransactionManager(dbFactory);
+    }
 
     @Bean
     public ApplicationRunner initMongoIndices(MongoTemplate mongoTemplate) {
