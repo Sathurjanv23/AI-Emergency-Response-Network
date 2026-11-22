@@ -37,6 +37,23 @@ export interface RejectRequirementVersionPayload {
   reviewComment: string;
 }
 
+export interface FieldComparisonItem {
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  addedText: string[];
+  removedText: string[];
+}
+
+export interface RequirementVersionComparisonResponse {
+  requirementId: string;
+  fromVersion: number;
+  toVersion: number;
+  hasChanges: boolean;
+  changedFields: FieldComparisonItem[];
+  unchangedFields: string[];
+}
+
 export const requirementVersionsApi = {
   getVersionHistory: (
     projectId: string,
@@ -106,5 +123,15 @@ export const requirementVersionsApi = {
         method: 'POST',
         body: JSON.stringify(payload),
       }
+    ),
+
+  compareVersions: (
+    projectId: string,
+    requirementId: string,
+    fromVersion: number,
+    toVersion: number
+  ): Promise<ApiResponseWrapper<RequirementVersionComparisonResponse>> =>
+    apiFetch(
+      `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/compare?from=${encodeURIComponent(fromVersion)}&to=${encodeURIComponent(toVersion)}`
     ),
 };
