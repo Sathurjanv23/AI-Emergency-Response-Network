@@ -80,6 +80,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", ex.getMessage()));
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        log.warn("Type mismatch: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", "Invalid parameter: " + ex.getName()));
+    }
+
     @ExceptionHandler(AccountConflictException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccountConflict(AccountConflictException ex) {
         log.warn("Account conflict: {}", ex.getMessage());
