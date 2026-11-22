@@ -67,4 +67,44 @@ export const requirementVersionsApi = {
         body: JSON.stringify(payload),
       }
     ),
+
+  submitForReview: (
+    projectId: string,
+    requirementId: string,
+    versionNumber: number
+  ): Promise<ApiResponseWrapper<RequirementVersionItem>> =>
+    apiFetch(
+      `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}/submit`,
+      {
+        method: 'POST',
+      }
+    ),
+
+  approveVersion: (
+    projectId: string,
+    requirementId: string,
+    versionNumber: number,
+    payload?: ApproveRequirementVersionPayload
+  ): Promise<ApiResponseWrapper<RequirementVersionItem>> =>
+    apiFetch(
+      `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}/approve`,
+      {
+        method: 'POST',
+        ...(payload ? { body: JSON.stringify(payload) } : {}),
+      }
+    ),
+
+  rejectVersion: (
+    projectId: string,
+    requirementId: string,
+    versionNumber: number,
+    payload: RejectRequirementVersionPayload
+  ): Promise<ApiResponseWrapper<RequirementVersionItem>> =>
+    apiFetch(
+      `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
 };

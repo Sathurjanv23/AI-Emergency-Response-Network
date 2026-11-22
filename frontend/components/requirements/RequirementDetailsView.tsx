@@ -37,6 +37,7 @@ interface RequirementDetailsViewProps {
   projectId: string;
   projectName?: string;
   onStatusUpdated?: (updated: RequirementItem) => void;
+  onRequirementUpdated?: (updated: RequirementItem) => void;
 }
 
 export function RequirementDetailsView({
@@ -44,6 +45,7 @@ export function RequirementDetailsView({
   projectId,
   projectName,
   onStatusUpdated,
+  onRequirementUpdated,
 }: RequirementDetailsViewProps) {
   // Modal state for status transitions
   const [targetStatus, setTargetStatus] = useState<RequirementStatus | null>(null);
@@ -243,6 +245,10 @@ export function RequirementDetailsView({
               requirementId={requirement.id}
               requirement={requirement}
               currentVersionId={requirement.currentVersionId}
+              onRequirementUpdated={(updated) => {
+                if (onRequirementUpdated) onRequirementUpdated(updated);
+                if (onStatusUpdated) onStatusUpdated(updated);
+              }}
             />
           )}
         </div>

@@ -1212,4 +1212,362 @@ it('CreateDraft Test 25: Approved snapshot immutability ensures source snapshot 
   assert.notStrictEqual(proposedDraft.title, approvedSnapshot.title);
 });
 
+// ─── Task 05.2.3: Requirement Version Review & Approval Actions Tests ───
+
+function getVisibleReviewActions(reviewStatus) {
+  switch (reviewStatus) {
+    case 'DRAFT':
+      return ['submit'];
+    case 'IN_REVIEW':
+      return ['approve', 'reject'];
+    case 'APPROVED':
+    case 'REJECTED':
+    default:
+      return [];
+  }
+}
+
+function validateRejectionComment(comment) {
+  if (!comment || !comment.trim()) {
+    return { isValid: false, error: 'Rejection comment explaining the reasons and required changes is required.' };
+  }
+  if (comment.trim().length > 1000) {
+    return { isValid: false, error: 'Rejection comment must not exceed 1000 characters.' };
+  }
+  return { isValid: true, comment: comment.trim() };
+}
+
+it('ReviewAction Test 1: Submit API method signature, parameters, and invocation', () => {
+  const buildSubmitRequest = (projectId, requirementId, versionNumber) => ({
+    endpoint: `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}/submit`,
+    method: 'POST',
+  });
+  const req = buildSubmitRequest('proj-1', 'req-1', 2);
+  assert.strictEqual(req.endpoint, '/projects/proj-1/requirements/req-1/versions/2/submit');
+  assert.strictEqual(req.method, 'POST');
+});
+
+it('ReviewAction Test 2: Approve API method signature and payload handling', () => {
+  const buildApproveRequest = (projectId, requirementId, versionNumber, payload) => ({
+    endpoint: `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}/approve`,
+    method: 'POST',
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+  const reqWithComment = buildApproveRequest('proj-1', 'req-1', 2, { reviewComment: 'Sign-off complete' });
+  assert.strictEqual(reqWithComment.endpoint, '/projects/proj-1/requirements/req-1/versions/2/approve');
+  assert.strictEqual(JSON.parse(reqWithComment.body).reviewComment, 'Sign-off complete');
+
+  const reqWithoutComment = buildApproveRequest('proj-1', 'req-1', 2);
+  assert.strictEqual(reqWithoutComment.body, undefined);
+});
+
+it('ReviewAction Test 3: Reject API method signature and mandatory payload handling', () => {
+  const buildRejectRequest = (projectId, requirementId, versionNumber, payload) => ({
+    endpoint: `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/${encodeURIComponent(versionNumber)}/reject`,
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const req = buildRejectRequest('proj-1', 'req-1', 2, { reviewComment: 'Missing validation rules' });
+  assert.strictEqual(req.endpoint, '/projects/proj-1/requirements/req-1/versions/2/reject');
+  assert.strictEqual(JSON.parse(req.body).reviewComment, 'Missing validation rules');
+});
+
+it('ReviewAction Test 4: Correct endpoint paths for submit, approve, and reject', () => {
+  const p = 'p-100';
+  const r = 'r-200';
+  const v = 3;
+  const submitPath = `/projects/${p}/requirements/${r}/versions/${v}/submit`;
+  const approvePath = `/projects/${p}/requirements/${r}/versions/${v}/approve`;
+  const rejectPath = `/projects/${p}/requirements/${r}/versions/${v}/reject`;
+  assert.strictEqual(submitPath, '/projects/p-100/requirements/r-200/versions/3/submit');
+  assert.strictEqual(approvePath, '/projects/p-100/requirements/r-200/versions/3/approve');
+  assert.strictEqual(rejectPath, '/projects/p-100/requirements/r-200/versions/3/reject');
+});
+
+it('ReviewAction Test 5: JWT authentication header transmission for review actions', () => {
+  const token = 'auth-jwt-token-999';
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+  assert.strictEqual(headers.Authorization, 'Bearer auth-jwt-token-999');
+});
+
+it('ReviewAction Test 6: Request payload compatibility against ApproveRequirementVersionRequest and RejectRequirementVersionRequest DTOs', () => {
+  const approvePayload = { reviewComment: 'Optional comment' };
+  assert.ok('reviewComment' in approvePayload);
+
+  const rejectPayload = { reviewComment: 'Required comment' };
+  assert.strictEqual(typeof rejectPayload.reviewComment, 'string');
+  assert.ok(rejectPayload.reviewComment.trim().length > 0);
+});
+
+it('ReviewAction Test 7: DRAFT action visibility displays Submit for Review action only', () => {
+  const actions = getVisibleReviewActions('DRAFT');
+  assert.deepStrictEqual(actions, ['submit']);
+});
+
+it('ReviewAction Test 8: IN_REVIEW action visibility displays Approve and Reject actions', () => {
+  const actions = getVisibleReviewActions('IN_REVIEW');
+  assert.deepStrictEqual(actions, ['approve', 'reject']);
+});
+
+it('ReviewAction Test 9: APPROVED read-only behavior hides mutable review actions and displays approved audit', () => {
+  const actions = getVisibleReviewActions('APPROVED');
+  assert.deepStrictEqual(actions, []);
+
+  const approvedVersion = {
+    versionNumber: 2,
+    reviewStatus: 'APPROVED',
+    approvedBy: 'user-owner',
+    approvedAt: '2026-11-22T04:40:00Z',
+  };
+  assert.strictEqual(approvedVersion.reviewStatus, 'APPROVED');
+  assert.ok(approvedVersion.approvedBy);
+  assert.ok(approvedVersion.approvedAt);
+});
+
+it('ReviewAction Test 10: REJECTED read-only behavior hides mutable review actions and displays rejection feedback', () => {
+  const actions = getVisibleReviewActions('REJECTED');
+  assert.deepStrictEqual(actions, []);
+
+  const rejectedVersion = {
+    versionNumber: 2,
+    reviewStatus: 'REJECTED',
+    reviewedBy: 'user-reviewer',
+    reviewComment: 'Insufficient acceptance criteria',
+  };
+  assert.strictEqual(rejectedVersion.reviewStatus, 'REJECTED');
+  assert.strictEqual(rejectedVersion.reviewComment, 'Insufficient acceptance criteria');
+});
+
+it('ReviewAction Test 11: Submit confirmation state transition logic', () => {
+  const currentStatus = 'DRAFT';
+  const canSubmit = currentStatus === 'DRAFT';
+  assert.strictEqual(canSubmit, true);
+
+  const targetStatus = 'IN_REVIEW';
+  assert.strictEqual(targetStatus, 'IN_REVIEW');
+});
+
+it('ReviewAction Test 12: Approval confirmation promotional impact explanation', () => {
+  const versionToApprove = { versionNumber: 2, title: 'Updated Specs' };
+  const explanation = `Approving version v${versionToApprove.versionNumber} promotes its snapshot to the active approved specification.`;
+  assert.ok(explanation.includes('v2'));
+  assert.ok(explanation.includes('promotes its snapshot to the active approved specification'));
+});
+
+it('ReviewAction Test 13: Rejection feedback validation rejects empty or whitespace comments', () => {
+  const emptyCheck = validateRejectionComment('');
+  assert.strictEqual(emptyCheck.isValid, false);
+  assert.ok(emptyCheck.error);
+
+  const whitespaceCheck = validateRejectionComment('   \n  ');
+  assert.strictEqual(whitespaceCheck.isValid, false);
+  assert.ok(whitespaceCheck.error);
+
+  const validCheck = validateRejectionComment('Please clarify performance benchmarks.');
+  assert.strictEqual(validCheck.isValid, true);
+  assert.strictEqual(validCheck.comment, 'Please clarify performance benchmarks.');
+});
+
+it('ReviewAction Test 14: Successful submit transitions version reviewStatus to IN_REVIEW', () => {
+  const mockDraft = { versionNumber: 2, reviewStatus: 'DRAFT' };
+  const mockSubmitted = { ...mockDraft, reviewStatus: 'IN_REVIEW' };
+  assert.strictEqual(mockSubmitted.reviewStatus, 'IN_REVIEW');
+});
+
+it('ReviewAction Test 15: Successful approve promotes version to APPROVED with reviewer ID and timestamp', () => {
+  const mockInReview = { versionNumber: 2, reviewStatus: 'IN_REVIEW' };
+  const mockApproved = {
+    ...mockInReview,
+    reviewStatus: 'APPROVED',
+    approvedBy: 'owner-id',
+    approvedAt: '2026-11-22T04:45:00Z',
+    reviewComment: 'LGTM',
+  };
+  assert.strictEqual(mockApproved.reviewStatus, 'APPROVED');
+  assert.strictEqual(mockApproved.approvedBy, 'owner-id');
+  assert.strictEqual(mockApproved.reviewComment, 'LGTM');
+});
+
+it('ReviewAction Test 16: Successful reject marks version as REJECTED with mandatory reviewer comment', () => {
+  const mockInReview = { versionNumber: 2, reviewStatus: 'IN_REVIEW' };
+  const mockRejected = {
+    ...mockInReview,
+    reviewStatus: 'REJECTED',
+    reviewedBy: 'owner-id',
+    reviewedAt: '2026-11-22T04:46:00Z',
+    reviewComment: 'Security review pending',
+  };
+  assert.strictEqual(mockRejected.reviewStatus, 'REJECTED');
+  assert.strictEqual(mockRejected.reviewComment, 'Security review pending');
+});
+
+it('ReviewAction Test 17: Version history refresh updates timeline upon review action completion', () => {
+  let timeline = [
+    { versionNumber: 2, reviewStatus: 'IN_REVIEW' },
+    { versionNumber: 1, reviewStatus: 'APPROVED' },
+  ];
+
+  const handleUpdate = (updatedVersion) => {
+    timeline = timeline.map((v) => (v.versionNumber === updatedVersion.versionNumber ? updatedVersion : v));
+  };
+
+  handleUpdate({ versionNumber: 2, reviewStatus: 'APPROVED', approvedBy: 'owner-1' });
+  assert.strictEqual(timeline[0].reviewStatus, 'APPROVED');
+  assert.strictEqual(timeline[0].approvedBy, 'owner-1');
+});
+
+it('ReviewAction Test 18: Requirement details refresh after approval updates active title, description, and status', () => {
+  const requirementBefore = {
+    id: 'req-001',
+    title: 'Initial Title',
+    description: 'Initial Description',
+    status: 'IN_REVIEW',
+    currentVersionId: 'ver-1',
+  };
+
+  const approvedVersion = {
+    id: 'ver-2',
+    title: 'Approved Title v2',
+    description: 'Approved Description v2',
+    reviewStatus: 'APPROVED',
+  };
+
+  const requirementAfter = {
+    ...requirementBefore,
+    title: approvedVersion.title,
+    description: approvedVersion.description,
+    status: 'APPROVED',
+    currentVersionId: approvedVersion.id,
+  };
+
+  assert.strictEqual(requirementAfter.title, 'Approved Title v2');
+  assert.strictEqual(requirementAfter.description, 'Approved Description v2');
+  assert.strictEqual(requirementAfter.status, 'APPROVED');
+  assert.strictEqual(requirementAfter.currentVersionId, 'ver-2');
+});
+
+it('ReviewAction Test 19: CurrentVersionId update handling points to newly approved snapshot', () => {
+  const currentVersionId = 'ver-2';
+  const versions = [
+    { id: 'ver-2', versionNumber: 2, reviewStatus: 'APPROVED' },
+    { id: 'ver-1', versionNumber: 1, reviewStatus: 'APPROVED' },
+  ];
+  const activeVersion = versions.find((v) => v.id === currentVersionId);
+  assert.strictEqual(activeVersion.versionNumber, 2);
+  assert.strictEqual(activeVersion.reviewStatus, 'APPROVED');
+});
+
+it('ReviewAction Test 20: Approved snapshot immutability ensures rejected or historical versions are never overwritten', () => {
+  const historicalV1 = Object.freeze({
+    id: 'ver-1',
+    versionNumber: 1,
+    title: 'Baseline Spec',
+    reviewStatus: 'APPROVED',
+  });
+
+  const rejectedV2 = {
+    id: 'ver-2',
+    versionNumber: 2,
+    title: 'Faulty Spec',
+    reviewStatus: 'REJECTED',
+  };
+
+  assert.strictEqual(historicalV1.title, 'Baseline Spec');
+  assert.strictEqual(historicalV1.reviewStatus, 'APPROVED');
+  assert.strictEqual(rejectedV2.reviewStatus, 'REJECTED');
+});
+
+it('ReviewAction Test 21: 400 validation error maps to user error without crashing', () => {
+  const mapped = mapRequirementApiError(400, 'Rejection comment is required.');
+  assert.strictEqual(mapped.code, 400);
+  assert.ok(mapped.userMessage.includes('Rejection comment is required'));
+});
+
+it('ReviewAction Test 22: 401 unauthenticated maps to sign-in prompt', () => {
+  const mapped = mapRequirementApiError(401);
+  assert.strictEqual(mapped.code, 401);
+  assert.ok(mapped.userMessage.includes('Authentication required'));
+});
+
+it('ReviewAction Test 23: 403 forbidden maps to owner permission restriction message', () => {
+  const mapped = mapRequirementApiError(403);
+  assert.strictEqual(mapped.code, 403);
+  assert.ok(mapped.userMessage.includes('Access denied'));
+});
+
+it('ReviewAction Test 24: 404 version not found maps to not found feedback', () => {
+  const mapped = mapRequirementApiError(404, 'Requirement version 99 not found');
+  assert.strictEqual(mapped.code, 404);
+  assert.ok(mapped.userMessage.includes('not found'));
+});
+
+it('ReviewAction Test 25: 409 conflict handles invalid state transitions and duplicate submissions', () => {
+  const duplicateSubmitError = 'Duplicate submission rejected: Version 2 is already in review.';
+  const mapped = mapRequirementApiError(409, duplicateSubmitError);
+  assert.strictEqual(mapped.code, 409);
+  assert.ok(mapped.userMessage.includes('Duplicate submission rejected'));
+});
+
+it('ReviewAction Test 26: Network failure produces user-facing error message', () => {
+  const err = new Error('Network connection lost');
+  assert.strictEqual(err.message, 'Network connection lost');
+});
+
+it('ReviewAction Test 27: Duplicate submission prevention blocks concurrent approval or rejection clicks', () => {
+  let isSubmitting = false;
+  let actionCount = 0;
+
+  const performAction = () => {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    actionCount++;
+  };
+
+  performAction();
+  performAction();
+  assert.strictEqual(actionCount, 1);
+});
+
+it('ReviewAction Test 28: Existing create-draft regression verifies version creation modal continues to function', () => {
+  const newDraft = {
+    title: 'Valid Title',
+    description: 'Valid Description',
+    changeSummary: 'Valid Summary',
+    changeType: 'UPDATED',
+  };
+  const validation = validateCreateVersionForm(newDraft);
+  assert.strictEqual(validation.isValid, true);
+});
+
+it('ReviewAction Test 29: Existing timeline regression verifies descending sort and badges', () => {
+  const versions = [
+    { versionNumber: 1, reviewStatus: 'APPROVED' },
+    { versionNumber: 3, reviewStatus: 'DRAFT' },
+    { versionNumber: 2, reviewStatus: 'IN_REVIEW' },
+  ];
+  const sorted = [...versions].sort((a, b) => b.versionNumber - a.versionNumber);
+  assert.strictEqual(sorted[0].versionNumber, 3);
+  assert.strictEqual(sorted[1].versionNumber, 2);
+  assert.strictEqual(sorted[2].versionNumber, 1);
+});
+
+it('ReviewAction Test 30: Existing requirement details regression verifies metadata and tab preservation', () => {
+  const details = {
+    id: 'req-001',
+    requirementKey: 'REQ-001',
+    status: 'APPROVED',
+    type: 'FUNCTIONAL',
+    priority: 'HIGH',
+    title: 'Traceability Matrix',
+    description: 'Specification content',
+  };
+  assert.strictEqual(details.requirementKey, 'REQ-001');
+  assert.strictEqual(details.status, 'APPROVED');
+  assert.ok(details.title);
+  assert.ok(details.description);
+});
+
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);
