@@ -11,6 +11,7 @@ import { formatRequirementDate, mapRequirementApiError } from '@/lib/project-val
 import { RequirementItem, requirementsApi } from '@/lib/api/client';
 import { CreateRequirementVersionForm } from './CreateRequirementVersionForm';
 import { RequirementVersionReviewActions } from './RequirementVersionReviewActions';
+import { RequirementVersionComparison } from './RequirementVersionComparison';
 import {
   Clock,
   History,
@@ -28,6 +29,7 @@ import {
   Layers,
   Calendar,
   PlusCircle,
+  GitCompare,
 } from 'lucide-react';
 
 interface RequirementVersionTimelineProps {
@@ -120,6 +122,9 @@ export function RequirementVersionTimeline({
   const [expandedVersions, setExpandedVersions] = useState<Record<number, boolean>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createdNotice, setCreatedNotice] = useState<string | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
+  const [compareFromVersion, setCompareFromVersion] = useState<number | undefined>(undefined);
+  const [compareToVersion, setCompareToVersion] = useState<number | undefined>(undefined);
 
   const fetchVersions = useCallback(async () => {
     if (!projectId || !requirementId) return;
@@ -318,6 +323,20 @@ export function RequirementVersionTimeline({
     );
   }
 
+  if (isComparing) {
+    return (
+      <RequirementVersionComparison
+        projectId={projectId}
+        requirementId={requirementId}
+        versions={versions}
+        initialFromVersion={compareFromVersion}
+        initialToVersion={compareToVersion}
+        requirementTitle={requirement?.title}
+        onClose={() => setIsComparing(false)}
+      />
+    );
+  }
+
   const approvedVersion = versions.find((v) => v.reviewStatus === 'APPROVED');
 
   return (
@@ -338,6 +357,22 @@ export function RequirementVersionTimeline({
         </div>
 
         <div className="flex items-center gap-2">
+          {versions.length >= 2 && (
+            <button
+              type="button"
+              onClick={() => {
+                setCompareFromVersion(undefined);
+                setCompareToVersion(undefined);
+                setIsComparing(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-nova-surface2 border border-nova-border hover:bg-nova-surface2/80 text-nova-text transition shadow-sm"
+              title="Compare two versions side by side"
+            >
+              <GitCompare className="w-3.5 h-3.5 text-nova-cyan" />
+              <span>Compare Versions</span>
+            </button>
+          )}
+
           {requirement && (
             <button
               type="button"
@@ -454,23 +489,45 @@ export function RequirementVersionTimeline({
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toggleExpand(ver.versionNumber);
-                      if (onSelectVersion) onSelectVersion(ver);
-                    }}
-                    className="inline-flex items-center gap-1 text-xs text-nova-text-dim hover:text-nova-text px-2 py-1 rounded bg-nova-surface border border-nova-border/60 transition"
-                    aria-expanded={isExpanded}
-                    aria-label={`Toggle details for version ${ver.versionNumber}`}
-                  >
-                    <span>{isExpanded ? 'Collapse' : 'Inspect'}</span>
-                    {isExpanded ? (
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {(() => {
+                      const prevVersion = versions.find((v) => v.versionNumber < ver.versionNumber);
+                      if (!prevVersion) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompareFromVersion(prevVersion.versionNumber);
+                            setCompareToVersion(ver.versionNumber);
+                            setIsComparing(true);
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-nova-cyan hover:text-nova-cyan-dim px-2 py-1 rounded bg-nova-surface border border-nova-border/60 hover:border-nova-cyan/40 transition"
+                          title={`Compare version v${ver.versionNumber} with previous version v${prevVersion.versionNumber}`}
+                        >
+                          <GitCompare className="w-3 h-3" />
+                          <span>Diff vs v{prevVersion.versionNumber}</span>
+                        </button>
+                      );
+                    })()}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleExpand(ver.versionNumber);
+                        if (onSelectVersion) onSelectVersion(ver);
+                      }}
+                      className="inline-flex items-center gap-1 text-xs text-nova-text-dim hover:text-nova-text px-2 py-1 rounded bg-nova-surface border border-nova-border/60 transition"
+                      aria-expanded={isExpanded}
+                      aria-label={`Toggle details for version ${ver.versionNumber}`}
+                    >
+                      <span>{isExpanded ? 'Collapse' : 'Inspect'}</span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Title & Summary */}

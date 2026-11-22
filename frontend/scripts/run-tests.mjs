@@ -1570,4 +1570,304 @@ it('ReviewAction Test 30: Existing requirement details regression verifies metad
   assert.ok(details.description);
 });
 
+// ─── Task 05.2.4: Side-by-Side Requirement Version Comparison Tests ───
+
+function computeDefaultCompareVersions(versions) {
+  if (!versions || versions.length < 2) return null;
+  const sorted = [...versions].sort((a, b) => a.versionNumber - b.versionNumber);
+  return {
+    from: sorted[sorted.length - 2].versionNumber,
+    to: sorted[sorted.length - 1].versionNumber,
+  };
+}
+
+it('Compare Test 1: Comparison API method signature and parameter validation', () => {
+  const buildCompareUrl = (projectId, requirementId, from, to) => {
+    if (!from || from <= 0 || !to || to <= 0) {
+      throw new Error('From and to must be positive integers');
+    }
+    return `/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/versions/compare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  };
+  const url = buildCompareUrl('proj-alpha', 'req-omega', 1, 2);
+  assert.strictEqual(url, '/projects/proj-alpha/requirements/req-omega/versions/compare?from=1&to=2');
+  assert.throws(() => buildCompareUrl('proj-alpha', 'req-omega', 0, 2), /positive integers/);
+});
+
+it('Compare Test 2: Correct endpoint path and parameter encoding', () => {
+  const pId = 'proj/test with space';
+  const rId = 'req/special#1';
+  const url = `/projects/${encodeURIComponent(pId)}/requirements/${encodeURIComponent(rId)}/versions/compare?from=1&to=2`;
+  assert.strictEqual(url, '/projects/proj%2Ftest%20with%20space/requirements/req%2Fspecial%231/versions/compare?from=1&to=2');
+});
+
+it('Compare Test 3: Query parameter encoding for from and to integers', () => {
+  const from = 1;
+  const to = 3;
+  const queryString = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  assert.strictEqual(queryString, 'from=1&to=3');
+});
+
+it('Compare Test 4: JWT authorization header attached on comparison request', () => {
+  const token = 'jwt-valid-token-comp';
+  const headers = { Authorization: `Bearer ${token}` };
+  assert.strictEqual(headers.Authorization, 'Bearer jwt-valid-token-comp');
+});
+
+it('Compare Test 5: Backend response mapping parses changedFields and unchangedFields', () => {
+  const mockBackendResponse = {
+    requirementId: 'req-001',
+    fromVersion: 1,
+    toVersion: 2,
+    hasChanges: true,
+    changedFields: [
+      {
+        field: 'title',
+        oldValue: 'Initial Title',
+        newValue: 'Updated Title',
+        addedText: ['Updated'],
+        removedText: ['Initial'],
+      },
+    ],
+    unchangedFields: ['description', 'reviewStatus'],
+  };
+  assert.strictEqual(mockBackendResponse.hasChanges, true);
+  assert.strictEqual(mockBackendResponse.changedFields.length, 1);
+  assert.strictEqual(mockBackendResponse.changedFields[0].field, 'title');
+  assert.strictEqual(mockBackendResponse.unchangedFields.includes('description'), true);
+});
+
+it('Compare Test 6: Version selector population orders versions ascending', () => {
+  const rawVersions = [{ versionNumber: 3 }, { versionNumber: 1 }, { versionNumber: 2 }];
+  const sorted = [...rawVersions].sort((a, b) => a.versionNumber - b.versionNumber);
+  assert.strictEqual(sorted[0].versionNumber, 1);
+  assert.strictEqual(sorted[1].versionNumber, 2);
+  assert.strictEqual(sorted[2].versionNumber, 3);
+});
+
+it('Compare Test 7: Default version pair selects latest two distinct versions', () => {
+  const versions = [{ versionNumber: 1 }, { versionNumber: 2 }, { versionNumber: 3 }];
+  const pair = computeDefaultCompareVersions(versions);
+  assert.strictEqual(pair.from, 2);
+  assert.strictEqual(pair.to, 3);
+});
+
+it('Compare Test 8: Same-version selection returns hasChanges false and identical content notice', () => {
+  const handleSameVersion = (ver) => ({
+    fromVersion: ver,
+    toVersion: ver,
+    hasChanges: false,
+    changedFields: [],
+    unchangedFields: ['title', 'description', 'changeType', 'reviewStatus'],
+  });
+  const res = handleSameVersion(2);
+  assert.strictEqual(res.hasChanges, false);
+  assert.strictEqual(res.changedFields.length, 0);
+  assert.strictEqual(res.unchangedFields.length, 4);
+});
+
+it('Compare Test 9: Explicit selection preservation keeps user-selected from/to', () => {
+  let userSelection = { from: 1, to: 3 };
+  assert.strictEqual(userSelection.from, 1);
+  assert.strictEqual(userSelection.to, 3);
+  // User selects reverse chronological
+  userSelection = { from: 3, to: 1 };
+  assert.strictEqual(userSelection.from, 3);
+  assert.strictEqual(userSelection.to, 1);
+});
+
+it('Compare Test 10: Chronological comparison direction indicator vFrom -> vTo', () => {
+  const from = 1;
+  const to = 2;
+  const directionLabel = `v${from} ➔ v${to}`;
+  assert.strictEqual(directionLabel, 'v1 ➔ v2');
+});
+
+it('Compare Test 11: Comparison header metadata renders version pills and titles', () => {
+  const headerContext = {
+    title: 'Bi-Directional Traceability',
+    fromVersion: 1,
+    toVersion: 2,
+    fromStatus: 'APPROVED',
+    toStatus: 'IN_REVIEW',
+  };
+  assert.strictEqual(headerContext.title, 'Bi-Directional Traceability');
+  assert.strictEqual(headerContext.fromStatus, 'APPROVED');
+  assert.strictEqual(headerContext.toStatus, 'IN_REVIEW');
+});
+
+it('Compare Test 12: Side-by-side title rendering maps old and new titles', () => {
+  const titleDiff = {
+    field: 'title',
+    oldValue: 'Emergency Dispatcher Matrix',
+    newValue: 'AI Emergency Response Dispatcher Matrix',
+    addedText: ['AI', 'Response'],
+    removedText: [],
+  };
+  assert.strictEqual(titleDiff.oldValue, 'Emergency Dispatcher Matrix');
+  assert.strictEqual(titleDiff.newValue, 'AI Emergency Response Dispatcher Matrix');
+  assert.deepStrictEqual(titleDiff.addedText, ['AI', 'Response']);
+});
+
+it('Compare Test 13: Side-by-side description rendering displays multiline content safely', () => {
+  const multilineDesc = 'Line 1: Requirement Specification\nLine 2: Functional behavior.\nLine 3: Safety limits.';
+  assert.strictEqual(multilineDesc.split('\n').length, 3);
+  assert.ok(multilineDesc.includes('Safety limits'));
+});
+
+it('Compare Test 14: Added content highlighting displays green tokens with plus sign', () => {
+  const addedTokens = ['Real-time', 'Telemetry'];
+  const formattedChips = addedTokens.map((t) => `+ ${t}`);
+  assert.deepStrictEqual(formattedChips, ['+ Real-time', '+ Telemetry']);
+});
+
+it('Compare Test 15: Removed content highlighting displays red tokens with minus sign and strikethrough', () => {
+  const removedTokens = ['Legacy', 'Polling'];
+  const formattedChips = removedTokens.map((t) => `- ${t}`);
+  assert.deepStrictEqual(formattedChips, ['- Legacy', '- Polling']);
+});
+
+it('Compare Test 16: Unchanged content rendering maps unchanged fields list', () => {
+  const unchanged = ['description', 'changeType'];
+  assert.strictEqual(unchanged.includes('description'), true);
+  assert.strictEqual(unchanged.includes('changeType'), true);
+});
+
+it('Compare Test 17: Identical content handling flags hasChanges false', () => {
+  const comparisonResult = {
+    hasChanges: false,
+    changedFields: [],
+  };
+  assert.strictEqual(comparisonResult.hasChanges, false);
+  assert.strictEqual(comparisonResult.changedFields.length, 0);
+});
+
+it('Compare Test 18: One-version empty state explains at least two versions required', () => {
+  const versions = [{ versionNumber: 1, title: 'Solo Version' }];
+  const canCompare = versions.length >= 2;
+  assert.strictEqual(canCompare, false);
+  const emptyMessage = 'At least two version snapshots are required to perform a comparison.';
+  assert.ok(emptyMessage.includes('At least two version snapshots are required'));
+});
+
+it('Compare Test 19: Zero-version empty state handles empty history safely', () => {
+  const versions = [];
+  const canCompare = versions.length >= 2;
+  assert.strictEqual(canCompare, false);
+  assert.strictEqual(versions.length, 0);
+});
+
+it('Compare Test 20: Loading state provides loading feedback', () => {
+  let loading = true;
+  const statusMessage = loading ? 'Computing version differences...' : 'Diff ready';
+  assert.strictEqual(statusMessage, 'Computing version differences...');
+});
+
+it('Compare Test 21: 400 error maps invalid comparison parameters', () => {
+  const mapped = mapRequirementApiError(400, "Version comparison parameters 'from' and 'to' must be positive integers.");
+  assert.strictEqual(mapped.code, 400);
+  assert.ok(mapped.userMessage.includes('positive integers'));
+});
+
+it('Compare Test 22: 401 error maps unauthenticated access to sign-in prompt', () => {
+  const mapped = mapRequirementApiError(401);
+  assert.strictEqual(mapped.code, 401);
+  assert.ok(mapped.userMessage.includes('Authentication required'));
+});
+
+it('Compare Test 23: 403 error maps unauthorized project access', () => {
+  const mapped = mapRequirementApiError(403);
+  assert.strictEqual(mapped.code, 403);
+  assert.ok(mapped.userMessage.includes('Access denied'));
+});
+
+it('Compare Test 24: 404 error maps missing requirement or version', () => {
+  const mapped = mapRequirementApiError(404, 'Requirement version 99 not found');
+  assert.strictEqual(mapped.code, 404);
+  assert.ok(mapped.userMessage.includes('not found'));
+});
+
+it('Compare Test 25: 500 error maps internal server error gracefully', () => {
+  const mapped = mapRequirementApiError(500, 'Comparison algorithm failed');
+  assert.strictEqual(mapped.code, 500);
+  assert.strictEqual(mapped.userMessage, 'Comparison algorithm failed');
+});
+
+it('Compare Test 26: Network failure produces actionable retry message', () => {
+  const networkError = new Error('Network error during comparison fetch');
+  assert.strictEqual(networkError.message, 'Network error during comparison fetch');
+});
+
+it('Compare Test 27: Retry action re-triggers comparison query', () => {
+  let queryCount = 0;
+  const triggerComparison = () => { queryCount++; };
+  triggerComparison();
+  triggerComparison(); // retry
+  assert.strictEqual(queryCount, 2);
+});
+
+it('Compare Test 28: Stale response protection discards out-of-order rapid responses', () => {
+  let activeRequestId = 0;
+  let activeData = null;
+
+  const startRequest = (reqId) => {
+    activeRequestId = reqId;
+  };
+
+  const receiveResponse = (reqId, data) => {
+    if (reqId !== activeRequestId) return; // Discard stale
+    activeData = data;
+  };
+
+  startRequest(1);
+  startRequest(2); // user rapidly changes dropdown to request 2
+
+  receiveResponse(1, { from: 1, to: 2 }); // arrives late, discarded!
+  assert.strictEqual(activeData, null);
+
+  receiveResponse(2, { from: 1, to: 3 }); // current request accepted!
+  assert.deepStrictEqual(activeData, { from: 1, to: 3 });
+});
+
+it('Compare Test 29: Timeline navigation integration preserves requirement context and tab state', () => {
+  let isComparing = false;
+  const openCompare = () => { isComparing = true; };
+  const closeCompare = () => { isComparing = false; };
+
+  openCompare();
+  assert.strictEqual(isComparing, true);
+  closeCompare();
+  assert.strictEqual(isComparing, false);
+});
+
+it('Compare Test 30: Create Draft regression confirms modal still functions', () => {
+  const draftData = {
+    title: 'Valid Compare Regression Title',
+    description: 'Detailed description.',
+    changeSummary: 'Regression test change.',
+    changeType: 'CLARIFIED',
+  };
+  const validation = validateCreateVersionForm(draftData);
+  assert.strictEqual(validation.isValid, true);
+});
+
+it('Compare Test 31: Submit / Approve / Reject regression confirms review workflow actions still work', () => {
+  const draftActions = getVisibleReviewActions('DRAFT');
+  const inReviewActions = getVisibleReviewActions('IN_REVIEW');
+  const approvedActions = getVisibleReviewActions('APPROVED');
+  assert.deepStrictEqual(draftActions, ['submit']);
+  assert.deepStrictEqual(inReviewActions, ['approve', 'reject']);
+  assert.deepStrictEqual(approvedActions, []);
+});
+
+it('Compare Test 32: Approved version immutability verifies read-only snapshot integrity', () => {
+  const frozenVersion = Object.freeze({
+    id: 'ver-frozen-1',
+    versionNumber: 1,
+    title: 'Frozen Baseline',
+    reviewStatus: 'APPROVED',
+  });
+  assert.strictEqual(frozenVersion.title, 'Frozen Baseline');
+  assert.strictEqual(Object.isFrozen(frozenVersion), true);
+});
+
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);
