@@ -8,6 +8,8 @@ import {
   VersionReviewStatus,
 } from '@/lib/api/requirementVersions';
 import { formatRequirementDate, mapRequirementApiError } from '@/lib/project-validation';
+import { RequirementItem } from '@/lib/api/client';
+import { CreateRequirementVersionForm } from './CreateRequirementVersionForm';
 import {
   Clock,
   History,
@@ -24,13 +26,16 @@ import {
   Sparkles,
   Layers,
   Calendar,
+  PlusCircle,
 } from 'lucide-react';
 
 interface RequirementVersionTimelineProps {
   projectId: string;
   requirementId: string;
+  requirement?: RequirementItem;
   currentVersionId?: string | null;
   onSelectVersion?: (version: RequirementVersionItem) => void;
+  onVersionCreated?: (version: RequirementVersionItem) => void;
 }
 
 export function VersionReviewStatusBadge({ status }: { status: VersionReviewStatus }) {
@@ -81,16 +86,16 @@ export function VersionChangeTypeBadge({ changeType }: { changeType: VersionChan
           UPDATED
         </span>
       );
-    case 'DEPRECATED':
+    case 'CLARIFIED':
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-zinc-700/30 text-zinc-400 border border-zinc-600/30">
-          DEPRECATED
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+          CLARIFIED
         </span>
       );
-    case 'RESTORED':
+    case 'CORRECTED':
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          RESTORED
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          CORRECTED
         </span>
       );
     default:
@@ -101,13 +106,17 @@ export function VersionChangeTypeBadge({ changeType }: { changeType: VersionChan
 export function RequirementVersionTimeline({
   projectId,
   requirementId,
+  requirement,
   currentVersionId,
   onSelectVersion,
+  onVersionCreated,
 }: RequirementVersionTimelineProps) {
   const [versions, setVersions] = useState<RequirementVersionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedVersions, setExpandedVersions] = useState<Record<number, boolean>>({});
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createdNotice, setCreatedNotice] = useState<string | null>(null);
 
   const fetchVersions = useCallback(async () => {
     if (!projectId || !requirementId) return;
@@ -231,18 +240,57 @@ export function RequirementVersionTimeline({
               Version History
             </h2>
           </div>
+
+          {requirement && (
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-nova-cyan text-nova-bg hover:bg-nova-cyan-dim transition shadow-sm shadow-nova-cyan/20"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Create New Version</span>
+            </button>
+          )}
         </div>
 
-        <div className="p-8 text-center rounded-xl bg-nova-surface2/30 border border-dashed border-nova-border space-y-2">
+        <div className="p-8 text-center rounded-xl bg-nova-surface2/30 border border-dashed border-nova-border space-y-3">
           <History className="w-8 h-8 text-nova-text-muted mx-auto mb-2 opacity-60" />
           <p className="text-sm font-semibold text-nova-text">No Version Snapshots Recorded</p>
           <p className="text-xs text-nova-text-muted max-w-sm mx-auto">
             Version history will be recorded as requirement specifications evolve through draft creation and review.
           </p>
+
+          {requirement && (
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-nova-cyan text-nova-bg hover:bg-nova-cyan-dim transition shadow-sm shadow-nova-cyan/20 mt-2"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Propose Baseline Version</span>
+            </button>
+          )}
         </div>
+
+        {showCreateModal && requirement && (
+          <CreateRequirementVersionForm
+            projectId={projectId}
+            requirement={requirement}
+            approvedVersion={null}
+            onCancel={() => setShowCreateModal(false)}
+            onSuccess={(created) => {
+              setShowCreateModal(false);
+              setCreatedNotice(`Version v${created.versionNumber} successfully created in DRAFT status!`);
+              fetchVersions();
+              if (onVersionCreated) onVersionCreated(created);
+            }}
+          />
+        )}
       </div>
     );
   }
+
+  const approvedVersion = versions.find((v) => v.reviewStatus === 'APPROVED');
 
   return (
     <section
@@ -250,7 +298,7 @@ export function RequirementVersionTimeline({
       className="p-6 bg-nova-surface border border-nova-border rounded-2xl shadow-lg space-y-4"
     >
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-nova-border/60">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-nova-border/60">
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-nova-cyan" />
           <h2 className="text-sm font-semibold text-nova-text uppercase tracking-wider">
@@ -261,16 +309,47 @@ export function RequirementVersionTimeline({
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={fetchVersions}
-          className="p-1.5 rounded-lg text-nova-text-muted hover:text-nova-cyan hover:bg-nova-surface2 transition"
-          title="Refresh version timeline"
-          aria-label="Refresh version timeline"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {requirement && (
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-nova-cyan text-nova-bg hover:bg-nova-cyan-dim transition shadow-sm shadow-nova-cyan/20"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Create New Version</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={fetchVersions}
+            className="p-1.5 rounded-lg text-nova-text-muted hover:text-nova-cyan hover:bg-nova-surface2 transition"
+            title="Refresh version timeline"
+            aria-label="Refresh version timeline"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+
+      {/* Creation Success Notice Banner */}
+      {createdNotice && (
+        <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800/70 text-xs text-emerald-200 flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-medium">{createdNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreatedNotice(null)}
+            className="text-emerald-400 hover:text-emerald-200 text-xs font-bold px-1.5 py-0.5"
+            aria-label="Dismiss message"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <p className="text-xs text-nova-text-muted">
         Chronological audit trail of specification snapshots and review decisions (newest first).
@@ -442,6 +521,22 @@ export function RequirementVersionTimeline({
           );
         })}
       </div>
+
+      {/* Create Version Modal */}
+      {showCreateModal && requirement && (
+        <CreateRequirementVersionForm
+          projectId={projectId}
+          requirement={requirement}
+          approvedVersion={approvedVersion}
+          onCancel={() => setShowCreateModal(false)}
+          onSuccess={(created) => {
+            setShowCreateModal(false);
+            setCreatedNotice(`Version v${created.versionNumber} successfully created in DRAFT status!`);
+            fetchVersions();
+            if (onVersionCreated) onVersionCreated(created);
+          }}
+        />
+      )}
     </section>
   );
 }

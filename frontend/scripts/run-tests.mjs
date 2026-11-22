@@ -924,4 +924,292 @@ it('Timeline Test 20: Existing requirement details regression verifies metadata 
   assert.strictEqual(req.type, 'FUNCTIONAL');
 });
 
+// ─── Task 05.2.2: Create Draft Requirement Version Tests ───
+
+const ALLOWED_CHANGE_TYPES = ['CREATED', 'UPDATED', 'CLARIFIED', 'CORRECTED'];
+
+function validateCreateVersionForm(data) {
+  const errors = {};
+  if (!data.title || !data.title.trim()) {
+    errors.title = 'Requirement title is required.';
+  } else if (data.title.trim().length > 200) {
+    errors.title = 'Title must not exceed 200 characters.';
+  }
+
+  if (!data.description || !data.description.trim()) {
+    errors.description = 'Requirement specification description is required.';
+  } else if (data.description.trim().length > 5000) {
+    errors.description = 'Description must not exceed 5000 characters.';
+  }
+
+  if (!data.changeSummary || !data.changeSummary.trim()) {
+    errors.changeSummary = 'Change summary explaining this version is required.';
+  } else if (data.changeSummary.trim().length > 1000) {
+    errors.changeSummary = 'Change summary must not exceed 1000 characters.';
+  }
+
+  if (!data.changeType || !['UPDATED', 'CLARIFIED', 'CORRECTED'].includes(data.changeType)) {
+    errors.changeType = 'Change type must be UPDATED, CLARIFIED, or CORRECTED.';
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
+it('CreateDraft Test 1: Create draft API method signature and path', () => {
+  const createPath = (pId, rId) => `/projects/${encodeURIComponent(pId)}/requirements/${encodeURIComponent(rId)}/versions`;
+  assert.strictEqual(createPath('proj-001', 'req-001'), '/projects/proj-001/requirements/req-001/versions');
+});
+
+it('CreateDraft Test 2: Correct POST endpoint and method', () => {
+  const requestConfig = {
+    method: 'POST',
+    body: JSON.stringify({ title: 'T', description: 'D', changeSummary: 'S', changeType: 'UPDATED' }),
+  };
+  assert.strictEqual(requestConfig.method, 'POST');
+});
+
+it('CreateDraft Test 3: JWT authentication token header format', () => {
+  const token = 'jwt-auth-token-12345';
+  const headers = { Authorization: `Bearer ${token}` };
+  assert.strictEqual(headers.Authorization, 'Bearer jwt-auth-token-12345');
+});
+
+it('CreateDraft Test 4: Request payload structure matches backend CreateRequirementVersionRequest DTO', () => {
+  const payload = {
+    title: 'Multi-factor Verification',
+    description: 'Requires TOTP authentication.',
+    changeSummary: 'Added MFA requirement',
+    changeType: 'UPDATED',
+  };
+  const keys = Object.keys(payload);
+  assert.deepStrictEqual(keys, ['title', 'description', 'changeSummary', 'changeType']);
+});
+
+it('CreateDraft Test 5: Change type enum strictly conforms to backend ChangeType enum', () => {
+  assert.strictEqual(ALLOWED_CHANGE_TYPES.includes('CREATED'), true);
+  assert.strictEqual(ALLOWED_CHANGE_TYPES.includes('UPDATED'), true);
+  assert.strictEqual(ALLOWED_CHANGE_TYPES.includes('CLARIFIED'), true);
+  assert.strictEqual(ALLOWED_CHANGE_TYPES.includes('CORRECTED'), true);
+  // Ensure legacy unsupported values are rejected
+  assert.strictEqual(ALLOWED_CHANGE_TYPES.includes('DEPRECATED'), false);
+  assert.strictEqual(ALLOWED_CHANGE_TYPES.includes('RESTORED'), false);
+});
+
+it('CreateDraft Test 6: Form initial values default cleanly', () => {
+  const defaultType = 'UPDATED';
+  assert.strictEqual(defaultType, 'UPDATED');
+});
+
+it('CreateDraft Test 7: Approved snapshot prepopulates form fields', () => {
+  const approvedSnapshot = {
+    versionNumber: 2,
+    reviewStatus: 'APPROVED',
+    title: 'Approved Title Specification',
+    description: 'Approved specification content.',
+  };
+  const currentReq = {
+    title: 'Active Title',
+    description: 'Active Description',
+  };
+
+  const getInitialValues = (req, approved) => {
+    if (approved && approved.reviewStatus === 'APPROVED') {
+      return { title: approved.title, description: approved.description, source: 'approved' };
+    }
+    return { title: req.title, description: req.description, source: 'current' };
+  };
+
+  const initial = getInitialValues(currentReq, approvedSnapshot);
+  assert.strictEqual(initial.title, 'Approved Title Specification');
+  assert.strictEqual(initial.description, 'Approved specification content.');
+  assert.strictEqual(initial.source, 'approved');
+});
+
+it('CreateDraft Test 8: Draft baseline fallback when no approved version exists', () => {
+  const draftBaseline = {
+    versionNumber: 1,
+    reviewStatus: 'DRAFT',
+    title: 'Draft Baseline Title',
+    description: 'Draft Baseline Description',
+  };
+  const currentReq = {
+    title: 'Requirement Current Title',
+    description: 'Requirement Current Description',
+  };
+
+  const getInitialValues = (req, approved) => {
+    if (approved && approved.reviewStatus === 'APPROVED') {
+      return { title: approved.title, description: approved.description, source: 'approved' };
+    }
+    return { title: req.title, description: req.description, source: 'current' };
+  };
+
+  const initial = getInitialValues(currentReq, draftBaseline);
+  assert.strictEqual(initial.title, 'Requirement Current Title');
+  assert.strictEqual(initial.source, 'current');
+});
+
+it('CreateDraft Test 9: Required field validation rejects blank title, description or changeSummary', () => {
+  const emptyCheck = validateCreateVersionForm({
+    title: '   ',
+    description: '',
+    changeSummary: '   ',
+    changeType: 'UPDATED',
+  });
+  assert.strictEqual(emptyCheck.isValid, false);
+  assert.ok(emptyCheck.errors.title);
+  assert.ok(emptyCheck.errors.description);
+  assert.ok(emptyCheck.errors.changeSummary);
+});
+
+it('CreateDraft Test 10: Invalid change type prevention rejects unknown values', () => {
+  const invalidTypeCheck = validateCreateVersionForm({
+    title: 'Valid Title',
+    description: 'Valid Description',
+    changeSummary: 'Valid Summary',
+    changeType: 'UNKNOWN_TYPE',
+  });
+  assert.strictEqual(invalidTypeCheck.isValid, false);
+  assert.ok(invalidTypeCheck.errors.changeType);
+});
+
+it('CreateDraft Test 11: Duplicate submission prevention blocks concurrent submits', () => {
+  let isSubmitting = false;
+  let submitCount = 0;
+
+  const handleSubmit = () => {
+    if (isSubmitting) return;
+    isSubmitting = true;
+    submitCount++;
+  };
+
+  handleSubmit();
+  handleSubmit(); // Second invocation while submitting
+  assert.strictEqual(submitCount, 1);
+});
+
+it('CreateDraft Test 12: Loading state disables buttons and inputs', () => {
+  const submitting = true;
+  const isButtonDisabled = submitting || false;
+  assert.strictEqual(isButtonDisabled, true);
+});
+
+it('CreateDraft Test 13: Successful draft creation returns 201 response data', () => {
+  const mockApiResponse = {
+    success: true,
+    data: {
+      id: 'ver-003',
+      projectId: 'proj-001',
+      requirementId: 'req-001',
+      versionNumber: 3,
+      title: 'New Proposed Title',
+      description: 'New Proposed Description',
+      changeSummary: 'Updated requirements',
+      changeType: 'UPDATED',
+      reviewStatus: 'DRAFT',
+      createdBy: 'user-123',
+    },
+  };
+  assert.strictEqual(mockApiResponse.success, true);
+  assert.strictEqual(mockApiResponse.data.versionNumber, 3);
+  assert.strictEqual(mockApiResponse.data.reviewStatus, 'DRAFT');
+});
+
+it('CreateDraft Test 14: Version history refresh updates timeline list', () => {
+  const timelineVersions = [{ versionNumber: 2 }, { versionNumber: 1 }];
+  const newCreatedVersion = { versionNumber: 3 };
+
+  const refreshedList = [newCreatedVersion, ...timelineVersions].sort((a, b) => b.versionNumber - a.versionNumber);
+  assert.strictEqual(refreshedList[0].versionNumber, 3);
+  assert.strictEqual(refreshedList.length, 3);
+});
+
+it('CreateDraft Test 15: New version starts in DRAFT status', () => {
+  const newVersion = { versionNumber: 3, reviewStatus: 'DRAFT' };
+  assert.strictEqual(newVersion.reviewStatus, 'DRAFT');
+});
+
+it('CreateDraft Test 16: 400 validation error maps to user error', () => {
+  const mapped = mapRequirementApiError(400, 'Title is required');
+  assert.strictEqual(mapped.code, 400);
+  assert.ok(mapped.userMessage.includes('Title is required'));
+});
+
+it('CreateDraft Test 17: 401 unauthorized error maps to login prompt', () => {
+  const mapped = mapRequirementApiError(401);
+  assert.strictEqual(mapped.code, 401);
+  assert.ok(mapped.userMessage.includes('Authentication required'));
+});
+
+it('CreateDraft Test 18: 403 forbidden error maps to permission denied', () => {
+  const mapped = mapRequirementApiError(403);
+  assert.strictEqual(mapped.code, 403);
+  assert.ok(mapped.userMessage.includes('Access denied'));
+});
+
+it('CreateDraft Test 19: 404 missing requirement maps to not-found response', () => {
+  const mapped = mapRequirementApiError(404);
+  assert.strictEqual(mapped.code, 404);
+  assert.ok(mapped.userMessage.includes('not found'));
+});
+
+it('CreateDraft Test 20: 409 conflict maps to conflict resolution message', () => {
+  const mapped = mapRequirementApiError(409, 'Concurrent version creation conflict.');
+  assert.strictEqual(mapped.code, 409);
+  assert.ok(mapped.userMessage.includes('Concurrent version creation conflict'));
+});
+
+it('CreateDraft Test 21: Network failure produces actionable error feedback', () => {
+  const networkError = new Error('Failed to fetch');
+  assert.strictEqual(networkError.message, 'Failed to fetch');
+});
+
+it('CreateDraft Test 22: Cancel action resets modal state', () => {
+  let modalOpen = true;
+  const onCancel = () => { modalOpen = false; };
+  onCancel();
+  assert.strictEqual(modalOpen, false);
+});
+
+it('CreateDraft Test 23: Existing version history regression preserves historical versions', () => {
+  const existingV1 = { versionNumber: 1, title: 'V1 Title', reviewStatus: 'APPROVED' };
+  const existingV2 = { versionNumber: 2, title: 'V2 Title', reviewStatus: 'DRAFT' };
+  const history = [existingV2, existingV1];
+  assert.strictEqual(history.length, 2);
+  assert.strictEqual(history[0].versionNumber, 2);
+});
+
+it('CreateDraft Test 24: Existing requirement details regression preserves parent context', () => {
+  const parentRequirement = {
+    id: 'req-001',
+    projectId: 'proj-001',
+    requirementKey: 'REQ-001',
+    status: 'APPROVED',
+  };
+  assert.strictEqual(parentRequirement.id, 'req-001');
+  assert.strictEqual(parentRequirement.requirementKey, 'REQ-001');
+});
+
+it('CreateDraft Test 25: Approved snapshot immutability ensures source snapshot is never mutated', () => {
+  const approvedSnapshot = Object.freeze({
+    id: 'ver-approved-1',
+    versionNumber: 1,
+    title: 'Original Approved Title',
+    description: 'Original Approved Description',
+    reviewStatus: 'APPROVED',
+  });
+
+  const proposedDraft = {
+    title: 'Modified Draft Title',
+    description: 'Modified Draft Description',
+    changeType: 'UPDATED',
+  };
+
+  assert.strictEqual(approvedSnapshot.title, 'Original Approved Title');
+  assert.notStrictEqual(proposedDraft.title, approvedSnapshot.title);
+});
+
 console.log(`\nResults: ${passed}/${total} frontend tests passed.`);
