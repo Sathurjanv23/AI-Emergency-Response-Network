@@ -221,7 +221,7 @@ class TraceabilityLinkModelTest {
     }
 
     @Test
-    @DisplayName("Should verify Document collection and CompoundIndex annotations")
+    @DisplayName("Should verify Document collection and CompoundIndex annotations (without status in unique index)")
     void shouldVerifyAnnotations() {
         Document docAnnotation = TraceabilityLink.class.getAnnotation(Document.class);
         assertThat(docAnnotation).isNotNull();
@@ -248,9 +248,15 @@ class TraceabilityLinkModelTest {
                         "{'projectId': 1, 'status': 1}".equals(idx.def()));
         assertThat(hasProjectStatusIdx).isTrue();
 
+        // Unique index must NOT include status (one document per logical relationship with ACTIVE/INACTIVE updates)
         boolean hasUniqueIdx = Arrays.stream(indexes)
-                .anyMatch(idx -> "project_source_target_type_status_unique_idx".equals(idx.name()) &&
+                .anyMatch(idx -> "project_source_target_type_unique_idx".equals(idx.name()) &&
+                        "{'projectId': 1, 'sourceArtifactType': 1, 'sourceArtifactId': 1, 'targetArtifactType': 1, 'targetArtifactId': 1, 'linkType': 1}".equals(idx.def()) &&
                         idx.unique());
         assertThat(hasUniqueIdx).isTrue();
+
+        Arrays.stream(indexes)
+                .filter(CompoundIndex::unique)
+                .forEach(idx -> assertThat(idx.def()).doesNotContain("'status'"));
     }
 }
