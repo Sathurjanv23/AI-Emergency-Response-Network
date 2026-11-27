@@ -74,7 +74,7 @@ public class TraceabilityLinkController {
 
         if (page != null || pageSize != null) {
             int pageNum = (page != null && page >= 0) ? page : 0;
-            int size = (pageSize != null && pageSize > 0) ? pageSize : 20;
+            int size = (pageSize != null && pageSize > 0) ? Math.min(pageSize, 100) : 20;
             Pageable pageable = PageRequest.of(pageNum, size, Sort.by(Sort.Direction.DESC, "createdAt"));
             Page<TraceabilityLinkResponse> pageResult = traceabilityLinkService.getLinksByProject(projectId, status, pageable, user.getId());
 
@@ -109,7 +109,7 @@ public class TraceabilityLinkController {
 
         if (page != null || pageSize != null) {
             int pageNum = (page != null && page >= 0) ? page : 0;
-            int size = (pageSize != null && pageSize > 0) ? pageSize : 20;
+            int size = (pageSize != null && pageSize > 0) ? Math.min(pageSize, 100) : 20;
             Pageable pageable = PageRequest.of(pageNum, size, Sort.by(Sort.Direction.DESC, "createdAt"));
             Page<TraceabilityLinkResponse> pageResult = traceabilityLinkService.getOutgoingLinks(
                     projectId, sourceArtifactType, sourceArtifactId.trim(), status, pageable, user.getId());
@@ -146,7 +146,7 @@ public class TraceabilityLinkController {
 
         if (page != null || pageSize != null) {
             int pageNum = (page != null && page >= 0) ? page : 0;
-            int size = (pageSize != null && pageSize > 0) ? pageSize : 20;
+            int size = (pageSize != null && pageSize > 0) ? Math.min(pageSize, 100) : 20;
             Pageable pageable = PageRequest.of(pageNum, size, Sort.by(Sort.Direction.DESC, "createdAt"));
             Page<TraceabilityLinkResponse> pageResult = traceabilityLinkService.getIncomingLinks(
                     projectId, targetArtifactType, targetArtifactId.trim(), status, pageable, user.getId());
@@ -179,7 +179,7 @@ public class TraceabilityLinkController {
 
         if (page != null || pageSize != null) {
             int pageNum = (page != null && page >= 0) ? page : 0;
-            int size = (pageSize != null && pageSize > 0) ? pageSize : 20;
+            int size = (pageSize != null && pageSize > 0) ? Math.min(pageSize, 100) : 20;
             Pageable pageable = PageRequest.of(pageNum, size, Sort.by(Sort.Direction.DESC, "createdAt"));
             Page<TraceabilityLinkResponse> pageResult = traceabilityLinkService.getLinksByType(
                     projectId, linkType, status, pageable, user.getId());
