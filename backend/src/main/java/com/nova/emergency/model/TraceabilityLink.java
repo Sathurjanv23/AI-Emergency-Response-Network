@@ -22,8 +22,8 @@ import java.time.Instant;
         @CompoundIndex(name = "project_target_idx", def = "{'projectId': 1, 'targetArtifactType': 1, 'targetArtifactId': 1}"),
         @CompoundIndex(name = "project_status_idx", def = "{'projectId': 1, 'status': 1}"),
         @CompoundIndex(
-                name = "project_source_target_type_status_unique_idx",
-                def = "{'projectId': 1, 'sourceArtifactType': 1, 'sourceArtifactId': 1, 'targetArtifactType': 1, 'targetArtifactId': 1, 'linkType': 1, 'status': 1}",
+                name = "project_source_target_type_unique_idx",
+                def = "{'projectId': 1, 'sourceArtifactType': 1, 'sourceArtifactId': 1, 'targetArtifactType': 1, 'targetArtifactId': 1, 'linkType': 1}",
                 unique = true
         )
 })
@@ -81,40 +81,4 @@ public class TraceabilityLink {
 
     @Builder.Default
     private String updatedAt = Instant.now().toString();
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-
-    public String getProjectId() { return projectId; }
-    public void setProjectId(String projectId) { this.projectId = projectId; }
-
-    public TraceabilityArtifactType getSourceArtifactType() { return sourceArtifactType; }
-    public void setSourceArtifactType(TraceabilityArtifactType sourceArtifactType) { this.sourceArtifactType = sourceArtifactType; }
-
-    public String getSourceArtifactId() { return sourceArtifactId; }
-    public void setSourceArtifactId(String sourceArtifactId) { this.sourceArtifactId = sourceArtifactId; }
-
-    public TraceabilityArtifactType getTargetArtifactType() { return targetArtifactType; }
-    public void setTargetArtifactType(TraceabilityArtifactType targetArtifactType) { this.targetArtifactType = targetArtifactType; }
-
-    public String getTargetArtifactId() { return targetArtifactId; }
-    public void setTargetArtifactId(String targetArtifactId) { this.targetArtifactId = targetArtifactId; }
-
-    public TraceabilityLinkType getLinkType() { return linkType; }
-    public void setLinkType(TraceabilityLinkType linkType) { this.linkType = linkType; }
-
-    public TraceabilityLinkStatus getStatus() { return status; }
-    public void setStatus(TraceabilityLinkStatus status) { this.status = status; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-
-    public String getCreatedAt() { return createdAt; }
-    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
-
-    public String getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
 }
