@@ -86,6 +86,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", "Invalid parameter: " + ex.getName()));
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(org.springframework.web.bind.MissingServletRequestParameterException ex) {
+        log.warn("Missing request parameter: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", "Required parameter '" + ex.getParameterName() + "' is missing"));
+    }
+
     @ExceptionHandler(AccountConflictException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccountConflict(AccountConflictException ex) {
         log.warn("Account conflict: {}", ex.getMessage());
